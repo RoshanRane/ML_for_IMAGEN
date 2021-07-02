@@ -1,0 +1,10 @@
+nohup: ignoring input
+========================================
+Running MLpipeline on file:
+ /ritter/share/data/IMAGEN/h5files/ESPAD19bcluster-growthcurves-l0u2_fsstats-all-FU3_n629.h5
+{'c': 's', 'chi': 36.728326788195346, 'p-value': 1.3579190237468837e-09, 'dof': 1}
+{'c': 'c', 'chi': 166.20158839319535, 'p-value': 2.8735266873648463e-33, 'dof': 6}
+   c         chi  dof       p-value
+0  s   36.728327  1.0  1.357919e-09
+1  c  166.201588  6.0  2.873527e-33
+TOTAL RUNTIME: 0:00:00 secs
