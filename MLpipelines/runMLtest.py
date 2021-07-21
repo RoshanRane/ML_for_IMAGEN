@@ -34,8 +34,8 @@ DATA_DIR = "/ritter/share/data/IMAGEN"
 
 ## Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
-N_PERMUTATIONS = 100
-N_JOBS = 10 # parallel jobs
+N_PERMUTATIONS = 0
+N_JOBS = 1 # parallel jobs
 PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
 DEBUG = False
@@ -48,7 +48,7 @@ if DEBUG:
     
 dirs = ['newlblst1w-bl-*', 'newlblst1w-fu2-*', 'newlblst1w-fu3-*'] #todo site# :: 'across_sites/lbls-bl-*'
 HOLDOUT_DIR = "/ritter/share/data/IMAGEN/h5files/newholdoutt1w-{}*{}*.h5" #todo site# newholdout:: h5files/holdout-
-SAVE_PATH = "holdout_results_t1w.csv" #todo site# #holdout_results :: holdout_results_sites 
+SAVE_PATH = "holdout_results_dummy.csv" #todo site# #holdout_results :: holdout_results_sites 
 
 # sort_by = "roc_auc"  #"roc_auc" #
 best_results = pd.DataFrame()

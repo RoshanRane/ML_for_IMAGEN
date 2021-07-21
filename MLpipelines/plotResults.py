@@ -194,7 +194,7 @@ def calc_p_values(df, x="test_score", viz=False):
             out = "y_{{{binge}}}"
             ax.set_title(r"${} \longmapsto {}$".format(inp,out))
 #             if i==0: ax.set_ylabel("distribution / counts")
-            if i==1: ax.set_xlabel("balanced accuracy (%)")
+            if i==1: ax.set_xlabel("Balanced accuracy (%)")
             if i==0:
                 from matplotlib.lines import Line2D
                 custom_lines = [Line2D([0], [0], color="tab:blue", markerfacecolor="tab:blue", marker='o', markersize=5, lw=0),

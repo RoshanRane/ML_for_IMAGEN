@@ -37,6 +37,22 @@ qs = dict(
         OUR_COMBO = DATA_DIR + "combinations/our_custom_combo/our_custom_combo.csv",
         )
 
+qs_is_raw_csv = dict(
+        AUDIT_BL  = True, 
+        AUDIT_FU1 = True, 
+        AUDIT_FU2 = True, 
+        AUDIT_FU3 = True, 
+        ESPAD_BL  = True, 
+        ESPAD_FU1 = True, 
+        ESPAD_FU2 = True, 
+        ESPAD_FU3 = True,           
+        AUDIT_GM       = False,
+        AUDIT_GM_FINE  = False, 
+        ESPAD_GM       = False,
+        ESPAD_GM_FINE  = False,        
+        PHENOTYPE = False, 
+        OUR_COMBO = False, 
+        )
 
 class Imagen:
         
@@ -280,7 +296,9 @@ class Imagen:
             self.df_out = self.df_out.merge(feature, on="ID")
             
         # only retain rows that have both X data and label data available
-        self.df_out = self.df_out.dropna()   
+        if viz: print(self.df_out[self.all_labels[0]].map(
+            {0: 'Safe users', 1: 'Heavy misusers', np.nan: 'Moderate misusers'}
+        ).value_counts().sort_index(ascending=False))  
 
         print(f"Final dataframe prepared. \nTotal subjects = {len(self.df_out)}")
         # plot the final distribution of labels and confounds
@@ -387,8 +405,7 @@ class Imagen:
 ####################################################################################################################
 def create_h5s(lbl_combos, name, x_tp="FU3", use_all_data=False, use_only_holdout=False, viz=0, feature_cols=".+"):
     
-    for csv, is_csv_raw, col, c0, c1, colname in lbl_combos:
-        
+    for csv, col, c0, c1, colname in lbl_combos:
         if use_all_data:
             d = Imagen(exclude_holdout=False)
         elif use_only_holdout:  
@@ -396,9 +413,9 @@ def create_h5s(lbl_combos, name, x_tp="FU3", use_all_data=False, use_only_holdou
             d.df = d.df_holdout
             d.df_out = pd.DataFrame(index=d.df_holdout.index)
         else:
-            d = Imagen()            
-            
-        if is_csv_raw:
+            d = Imagen()         
+
+        if qs_is_raw_csv[csv]:
             dfq = pd.read_csv(qs[csv], usecols=["User code", col], dtype={"User code":str})
             dfq["ID"] = dfq["User code"].str.replace("-C", "").replace("-I", "").astype(int)
             dfq = dfq.drop("User code", axis=1)
@@ -406,7 +423,6 @@ def create_h5s(lbl_combos, name, x_tp="FU3", use_all_data=False, use_only_holdou
             dfq = pd.read_csv(qs[csv], usecols=["ID", col])
         
         d.load_label(dfq, col=col, viz=(viz>1), binarize=True, class0=c0, class1=c1, y_colname=colname)
-        
         d.prepare_X(x_tp, feature_cols=feature_cols, viz=(viz>0))
         
         d.hdf5_name_x = name
@@ -422,7 +438,8 @@ def print_h5list(fil):
         print(f" ('{f}', 'all'),")
         
         
-######### clustering labels ############
+####################################################################################################################
+# clustering labels 
 from sklearn import preprocessing
 scaler = preprocessing.StandardScaler()
 from sklearn.cluster import KMeans
