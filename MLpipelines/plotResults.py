@@ -186,7 +186,7 @@ def calc_p_values(df, x="test_score", viz=False):
             if x in ["test_score"]:
                 # chance is 14% for site prediction and 50% for y and sex predictions
                 chance = 0.5 if g[0][-1]!='c' else (1/7)
-                ax.axvline(chance, color='k', linestyle="--")
+                ax.axvline(chance, color='grey', linestyle="--", lw=1.5)
                 ax.set_xlim(0.,1.)
             ## paper plot jugaad
             ax.set_xticklabels([str(item) for item in range(0,120, 120//len(ax.get_xticklabels()))])

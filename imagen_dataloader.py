@@ -295,11 +295,12 @@ class Imagen:
             self.X_colnames = list(feature.columns)
             self.df_out = self.df_out.merge(feature, on="ID")
             
-        # only retain rows that have both X data and label data available
         if viz: print(self.df_out[self.all_labels[0]].map(
             {0: 'Safe users', 1: 'Heavy misusers', np.nan: 'Moderate misusers'}
         ).value_counts().sort_index(ascending=False))  
-
+            
+        # only retain rows that have both X data and label data available        
+        self.df_out = self.df_out.dropna()
         print(f"Final dataframe prepared. \nTotal subjects = {len(self.df_out)}")
         # plot the final distribution of labels and confounds
         if viz: 
@@ -340,19 +341,19 @@ class Imagen:
             X = np.stack(X)
             
         # write all data to a hdf5 file
-        with h5py.File(dest, "w") as h5:
-            h5.create_dataset('X', data=X, chunks=True)
-            h5.create_dataset('i', data=self.df_out.index)
-            for y in self.all_labels:
-                h5.create_dataset(y, data=self.df_out[y])
-            for c in self.all_confs:
-                h5.create_dataset(c, data=self.df_out[c])
-            # set attributes to distinguish labels from confounds
-            h5.attrs['labels']= self.all_labels
-            h5.attrs['confs']= self.all_confs
-            # set attribute to name the X features for later interpretations
-            h5.attrs['X_col_names']= self.X_colnames
-
+        h5=h5py.File(dest, "w")
+        h5.create_dataset('X', data=X, chunks=True)
+        h5.create_dataset('i', data=self.df_out.index)
+        for y in self.all_labels:
+            h5.create_dataset(y, data=self.df_out[y])
+        for c in self.all_confs:
+            h5.create_dataset(c, data=self.df_out[c])
+        # set attributes to distinguish labels from confounds
+        h5.attrs['labels']= self.all_labels
+        h5.attrs['confs']= self.all_confs
+        # set attribute to name the X features for later interpretations
+        h5.attrs['X_col_names']= self.X_colnames
+        h5.close()
     
     def _load_mri(self, paths, 
                   z_factor=1, apply_mask=None, z_order=3, z_prefilter=True,
