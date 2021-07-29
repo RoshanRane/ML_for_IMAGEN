@@ -46,9 +46,8 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
         df = compute_metric(df, x)
     
     # make io labels readable with latex formating
-    df.loc[:,"io"] = df.apply(remap_io, axis=1)     
-#   models_rename = {"LogisticRegression":"LR", "LinearSVC":"SVM-lin", "SVC":"SVM-rbf", "GradientBoostingClassifier":"GB"} # todo remove this backward compatibility code
-#     df = df.assign(model=lambda d: d.model.map(models_rename))    
+    df.loc[:,"io"] = df.apply(remap_io, axis=1)
+    df[x] = df[x].apply(lambda x: x*100)   
     
     # setup the figure properties
     sns.set(style='whitegrid', context='paper')
@@ -56,7 +55,7 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
                              sharex=True, sharey=True, 
                              dpi=120, figsize=(5*len(conf_ctrl), 1+0.4*(len(ios)+input_types_cnt)))
     if not isinstance(axes, np.ndarray): axes = [axes]
-    plt.gca().set_xlim([0.0,1.0])    
+    fig.gca().set_xlim([0,100])    
         
     y="io"     
     if is_multi:
@@ -110,20 +109,21 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
                             color=palette[i//len(df[y].unique())], fontsize=5)
 
         # draw the chance line in the legend
-        chance = (len(dfi[y].unique()))*[0.5] #todo
+        chance = (len(dfi[y].unique()))*[50] #todo
         for z, ch in enumerate(chance): 
             ax.axvline(x=ch, ymin=z/len(chance), ymax=(z+1)/(len(chance)), 
-                        label="chance", c='gray', ls='--', lw=0.5)
+                        label="chance", c='gray', ls='--', lw=1.5)
 
     # add legend: add models info and chance label
     handles, legends = ax.get_legend_handles_labels()
-    #only choose the first 'chance' legend
-    handles = [handles[0]] + handles[len(chance):]
-    legends = [legends[0]] + legends[len(chance):]
-    fig.legend(handles, legends, loc="upper right", 
-               fancybox=True, frameon=True) 
+    leg1 = fig.legend(handles[len(chance):], legends[len(chance):], 
+                      loc="upper right", title="ML models", fancybox=True, frameon=True)
+    # only choose the first 'chance' legend
+    leg2 = fig.legend([handles[0]], [legends[0]], loc="center right")
+    fig.add_artist(leg1)
 
     fig.tight_layout()
+    
     return fig
     
 
