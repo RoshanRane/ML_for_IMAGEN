@@ -40,10 +40,10 @@ N_OUTER_CV = 7 # number of folds in inner crossvalidation for test score estimat
 N_INNER_CV = 5 # number of folds in inner crossvalidation used for hyperparameter tuning
 ## Optional runs
 RUN_CONFS = False
-CONF_CTRL_TECHS = ["baseline", "cb", "loso"] # choose from ["baseline", "cb", "cr", "loso"] 
-SAVE_MODELS = True # saves the final trained models but only for io=={X-y} and conf_ctrl_tech=='CB' 
+CONF_CTRL_TECHS = ["baseline"] # choose from ["baseline", "cb", "cr", "loso"] 
+SAVE_MODELS = False # saves the final trained models but only for io=={X-y} and conf_ctrl_tech=='CB' 
 RUN_PBCC = False # run the prediction-based post-prediction conf_ctrl_tech by Dinga et al. 2020
-RUN_CHI_SQUARE = True # runs a chi-square analysis between the label and all the confounds (todo: only supports categorical confounds)
+RUN_CHI_SQUARE = False # runs a chi-square analysis between the label and all the confounds (todo: only supports categorical confounds)
 
 ## Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
@@ -111,7 +111,7 @@ H5_FILES = [
 #'/ritter/share/data/IMAGEN/h5files/newlbls-bl-audit-fu3-audit-freq-audit-quick-n614.h5',
 #'/ritter/share/data/IMAGEN/h5files/newlbls-bl-audit-fu3-audit-total-audit-n687.h5',
 #'/ritter/share/data/IMAGEN/h5files/newlbls-bl-audit-gm-fine-cluster-audit-growth-n759.h5',
-# '/ritter/share/data/IMAGEN/h5files/newlbls-bl-espad-fu3-19a-binge-n620.h5',
+'/ritter/share/data/IMAGEN/h5files/newlbls-bl-espad-fu3-19a-binge-n620.h5',
 #'/ritter/share/data/IMAGEN/h5files/newlbls-bl-espad-fu3-29d-onset-15-n654.h5',
 #'/ritter/share/data/IMAGEN/h5files/newlbls-bl-espad-fu3-8b-frequency-n868.h5',
 #'/ritter/share/data/IMAGEN/h5files/newlbls-bl-audit-fu3-audit2-amount-n728.h5',
@@ -373,9 +373,14 @@ def main():
             start_time = datetime.now()
             print("time: ", start_time)
             # Create the folder in which to save the results
-            SAVE_DIR = "results/{}/{}".format(
-                os.path.basename(h5_file).replace(".h5",""),
+            if DEBUG: 
+                os.system("rm -rf results/debug_run 2> /dev/null")
+                SAVE_DIR = "results/debug_run/{}".format(
                 start_time.strftime("%Y%m%d-%H%M"))
+            else:
+                SAVE_DIR = "results/{}/{}".format(
+                    os.path.basename(h5_file).replace(".h5",""),
+                    start_time.strftime("%Y%m%d-%H%M"))
             if not os.path.isdir(SAVE_DIR): os.makedirs(SAVE_DIR)
             
             # load the data.h5 file
@@ -447,6 +452,5 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
             print("TOTAL RUNTIME: {} secs".format(runtime))
 
 #########################################################################################################################
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
    

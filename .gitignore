@@ -1,5 +1,6 @@
+*.h5
 nohup*.out
-MLpipelines/results/*
+**/results/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
