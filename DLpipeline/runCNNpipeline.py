@@ -1,4 +1,3 @@
-# dependencies and plotting
 import os, sys, inspect
 from glob import glob
 import h5py
@@ -33,34 +32,37 @@ from models import *
 ##############################################################################
 ### CONFIG start #############################################################
 
-GPUS = [1,2,3]
-MAX_GPUS_IN_PARALLEL = 3 # maximum number of GPUs to use at once 
-H5_FILES = ["/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-z2-bingel3u6-n*.h5"] 
-# todo holdout  # fullbrain-fu3-hold-z2-bingel3u6-n*.h5"
+# H5_FILES = [(train_data, holdout_data), ...]
+H5_FILES = [("/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-z2-bingel3u6-n*.h5",
+            "/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-hold-z2-bingel3u6-n*.h5")]
 
-RUN_CONFS = False # todo test
 CONF_CTRL_TECHS = ["none"] # todo test 'loo-site', 'loo-sex' 
 K_FOLD_CV = True
 N_CV_TRIALS = 5
+
+GPUS= [1,2,3,4,5]
+MAX_GPUS_IN_PARALLEL= N_CV_TRIALS # maximum number of GPUs to use at once 
+
+RUN_CONFS = False # todo test
 RAND_STATE = None
-RUN_CHI_SQUARE = False # todo test
+RUN_CHI_SQUARE = False 
 
 DEBUG = False
 
 # The DL model to train and it's corresponding hyperparameters as tuples i.e. (pipeline, grid)
 MODEL_SETTINGS = [
-#     {
-#     "model": SixtyFourNet, 
-#     "batch_size": 8, "num_epochs": 50, "earlystop_patience": 8,
-#     "criterion": nn.BCEWithLogitsLoss, "criterion_params": {},
-#     "optimizer": optim.Adam, "optimizer_params":{"lr": 1e-4, "weight_decay": 1e-4},
-#     "weights_pretrained": "results/pretrained_adni/run*_model-best.h5",
-#     "augmentations": [SagittalFlip(prob=0.5), SagittalTranslate(dist=(-2, 2)), IntensityRescale(masked=False)]
-#     },
     {
-    "model": SixtyFourNet2, 
+    "model": SixtyFourNet, 
     "batch_size": 8, "num_epochs": 50, "earlystop_patience": 8,
-    "criterion": nn.BCEWithLogitsLoss, "criterion_params": {},
+    "criterion": nn.BCEWithLogitsLoss, "criterion_params": {'pos_weight':'balanced'},
+    "optimizer": optim.Adam, "optimizer_params":{"lr": 1e-4, "weight_decay": 1e-4},
+    "weights_pretrained": "results/pretrained_adni/run*_model-best.h5",
+    "augmentations": [SagittalFlip(prob=0.5), SagittalTranslate(dist=(-2, 2)), IntensityRescale(masked=False)]
+    },
+    {
+    "model": SixtyFourNet, 
+    "batch_size": 8, "num_epochs": 50, "earlystop_patience": 8,
+    "criterion": nn.BCEWithLogitsLoss, "criterion_params": {'pos_weight':'balanced'},
     "optimizer": optim.Adam, "optimizer_params": {"lr": 1e-4, "weight_decay": 1e-4},
     "weights_pretrained": None,
     "augmentations": [SagittalFlip(prob=0.5), SagittalTranslate(dist=(-2, 2)), IntensityRescale(masked=False)]
@@ -76,7 +78,7 @@ if DEBUG:
     MODEL_SETTINGS = [MODEL_SETTINGS[0]]
     MODEL_SETTINGS[0]["num_epochs"]=5
     MODEL_SETTINGS[0]["batch_size"]=2
-    MODEL_SETTINGS[0]["earlystop_patience"]=1
+    MODEL_SETTINGS[0]["earlystop_patience"]=0
     
     
 def main():
@@ -88,7 +90,7 @@ def main():
         
     with Parallel(n_jobs=MAX_GPUS_IN_PARALLEL) as parallel:  
         
-        for h5_file in H5_FILES:
+        for h5_file, h5_hold_file in H5_FILES:
 
             start_time = datetime.now()
             # Create the folder in which to save the results
@@ -121,6 +123,16 @@ def main():
                         'y': np.array(h5[y]),
                         'i': np.array(h5['i'])}
                 for c in conf_names: data.update({c:np.array(h5[c])})
+                    
+                # also load holdout if it is provided
+                data_hold = {'X':None, 'y':None, 'i':None}
+                if h5_hold_file:
+                    h5_hold = h5py.File(glob(h5_hold_file)[0], 'r')
+                    data_hold = {'X': np.array(h5_hold['X']), 
+                                 'y': np.array(h5_hold[y]),
+                                 'i': np.array(h5_hold['i'])}
+                    h5_hold.close()
+                
             
             if DEBUG: 
                 # only use the first 10 samples in debug mode
@@ -154,14 +166,17 @@ def main():
                         else: # random splits with overlapping test sets
                             test_idxs = [np.random.randint(0, len(data['y']), size=round(0.2*len(data['y']))
                                             ) for _ in range(N_CV_TRIALS)]
-                            
+                        
                         for j, test_idx in enumerate(test_idxs):
-                            settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, 
+                            settings.extend([{**model_setting,
+                                              "conf_ctrl_tech":conf_ctrl_tech, 
                                               "i":io[0], "o":io[1], 
                                               "trial":j, 
                                               "val_idx": test_idx,                                              
                                               "val_ids": data['i'][test_idx], "val_lbls": data['y'][test_idx],
-                                              **model_setting}]) 
+                                              "h5_train": h5_file, "h5_holdout": h5_hold_file,  
+                                              "hold_ids": data_hold['i'], "hold_lbls": data_hold['y'],
+                                              }]) 
 
             print(f"running {len(settings)} different combinations of [cross_val_folds, DL-models,\
  inputs-outputs, conf_ctrls] in parallel")
@@ -171,6 +186,7 @@ def main():
                 delayed(
                         cnn_pipeline)(
                             X=data["X"], y=data["y"],
+                            X_test=data_hold["X"], y_test=data_hold["y"],
                             **setting,
                             gpu=devices[i%len(devices)],
                             metrics=[binary_balanced_accuracy, sensitivity, specificity], 
@@ -188,13 +204,13 @@ def main():
 
             # calculate the chi-square statistics between confounds and label if requested
             if RUN_CHI_SQUARE and conf_names:
-                run = run_chi_sq(data, [y], conf_names)
+                run = run_chi_sq(data, conf_names)
                 run.to_csv(join(SAVE_DIR, "chi-square.csv"), index=False)                
                 
             runtime=str(datetime.now()-start_time).split(".")[0]
             print("TOTAL RUNTIME: {} secs".format(runtime))
             
             
-#########################################################################################################################
+##############################################################################################################
 
 if __name__ == "__main__": main()

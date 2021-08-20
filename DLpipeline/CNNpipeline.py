@@ -6,6 +6,7 @@ from glob import glob
 import h5py
 import matplotlib.pyplot as plt 
 import numpy as np
+import gc
 
 # path
 from pathlib import Path
@@ -56,12 +57,9 @@ class myDataset(Dataset):
     
     def __getitem__(self, idx):
         image = self.X[idx]
-        # Convert labels to binary; sometimes labels are not exactly 0 or 1
-        label = self.y[idx] >= 0.5 
-        label = torch.FloatTensor([label])
-        
-        if self.transform:
-            image = self.transform(image)
+        if self.transform: image = self.transform(image)
+        # use soft label? # label = 0.98 if self.y[idx]>=0.5 else 0.02 
+        label = torch.FloatTensor([(self.y[idx]>=0.5)])
             
         sample = {"image" : image, "label" : label}
         return sample
@@ -71,13 +69,13 @@ class myDataset(Dataset):
 def cnn_pipeline(
     model,
     gpu,
-    X, y, val_idx,
+    X, y, val_idx, X_test, y_test, 
     batch_size=4, num_epochs=35,
     criterion = nn.BCEWithLogitsLoss, criterion_params = {},
     optimizer = optim.Adam, optimizer_params = {"lr":1e-4, "weight_decay":1e-4},
     weights_pretrained=None,
     augmentations = [],
-    metrics=[binary_balanced_accuracy], earlystop_patience=5,
+    metrics=['binary_balanced_accuracy'], earlystop_patience=5,
     output_dir="results/", save_model=True,
     run_id=0, debug=False,
     **kwargs):      
@@ -102,15 +100,19 @@ def cnn_pipeline(
     with open(join(output_dir, logfname)+".log", "a") as logfile:
         with redirect_stdout(logfile):
             
+            # initialize DL model on a GPU
+            net = model().cuda(gpu)
+            
             start_time = datetime.now()
             params_log = {
-                "run_id":     run_id,
-                "model":      model.__name__,
-                "n_samples":  len(y),
+                "run_id":        run_id,
+                "n_samples":     len(y),
+                "m__name":       model.__name__,
+                "m__n_params":   count_parameters(net),
                 "m__batch_size": batch_size,
                 "m__num_epochs": num_epochs,
-                "m__criterion": f"{criterion.__name__}({criterion_params})",
-                "m__optimizer": f"{optimizer.__name__}({optimizer_params})",
+                "m__criterion":  f"{criterion.__name__}({criterion_params})",
+                "m__optimizer":  f"{optimizer.__name__}({optimizer_params})",
                 "m__augmentations": [type(aug).__name__ for aug in augmentations],
                 "m__weights_pretrained": weights_pretrained if weights_pretrained else "None",
                 "m__earlystop_patience": earlystop_patience}
@@ -119,11 +121,17 @@ def cnn_pipeline(
             \n{params_log}\
             \ngpu: {gpu.__str__()}\
             \noutput_dir: {output_dir}\
-            \n---------------------------------------------------------------")
+            \n---------------- CNNpipeline starting ----------------")
             
-            # initialize DL model on a GPU
-            net = model().cuda(gpu)
-            print(f"Trainable model parameters: {count_parameters(net)}")
+            # prepare a dict to store all results
+            result = {"model": str(net)} # save model full structure as str
+            result.update(kwargs)
+            result.update(params_log)
+            
+            # create a mask to distinguish between training & validation samples
+            mask = np.ones(len(y), dtype=bool)
+            mask[val_idx] = False
+            
             # if provided, load a pretrained model
             if weights_pretrained:
                 if os.path.exists(weights_pretrained.replace('*','{}',1).format(run_id)):
@@ -133,19 +141,27 @@ def cnn_pipeline(
                 print("Initializing model weights using a pretrained model:",weights_pretrained)
                 net.load_state_dict(torch.load(weights_pretrained))
             else:
-                net.apply(weights_init) # todo make this a parameter
+                net.apply(weights_init) # todo make this a function argument            
+            
+            # calculate the balancing loss weights, if requested (incase of unbalanced datasets)
+            if ('pos_weight' in criterion_params) and criterion_params['pos_weight']=='balanced':
+                # weight should be calculated as (n_neg_examples/n_pos_examples)
+                _, c = np.unique(y[mask], return_counts=True)
+                weight = c[0]/c[1]
+                print("weighting possitive classes by {:.2f} in the loss function".format(weight))
+                criterion_params['pos_weight'] = torch.FloatTensor([weight]).cuda(gpu)
 
             criterion = criterion(**criterion_params).cuda(gpu)
             optimizer = optimizer(net.parameters(), **optimizer_params)
             
-            main_metric = metrics[0].__name__ # todo: bug what if metrics is empty list?
+            main_metric = metrics[0].__name__ if metrics else "binary_balanced_accuracy"
             # configure callbacks 
             callbacks = []
             if earlystop_patience:
                 callbacks.extend([
                     EarlyStopping(earlystop_patience, window=2,
                                   ignore_before=earlystop_patience, 
-                                  retain_metric="loss", mode='min')]) # dd: do early stopping on the loss instead of the metric
+                                  retain_metric="loss", mode='min')]) # dd: do early stopping on the loss
             if save_model:
                 callbacks.extend([
                     ModelCheckpoint(path=output_dir, prepend=logfname,
@@ -155,124 +171,77 @@ def cnn_pipeline(
 
             # prepare training and validation data as Pytorch DataLoader objects
             transform = transforms.Compose(augmentations + [ToTensor()])
-            # create a mask to distinguish between training & validation samples
-            mask = np.ones(len(y), dtype=bool)
-            mask[val_idx] = False
+            
             train_data = myDataset(X[mask], y[mask], transform=transform)
-            train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=4, shuffle=True,
+            train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=2, shuffle=True,
                                       multiprocessing_context=get_context('loky')) #https://github.com/pytorch/pytorch/issues/44687
             val_data = myDataset(X[~mask], y[~mask], transform=transform)
             val_loader = DataLoader(val_data, batch_size=batch_size, shuffle=False, drop_last=False)
-
+            
             trainer = Trainer(net,
                         criterion, optimizer,
                         metrics=metrics, callbacks=callbacks,
                         device=gpu, prediction_type="binary")
-
+                    
             # train model
             net, report = trainer.train_model(
                                     train_loader, val_loader,
-                                    num_epochs=num_epochs)
+                                    num_epochs=num_epochs)                   
             
-            # prepare the report to save the results in a run*.csv
-            best_model = report.pop('best_model')
+            # Save the training metrics in the results dict
             for key in ["train_metrics", "val_metrics"]:
-                for metric, value in report.pop(key).items():
-                    report[key.replace('metrics','')+metric]=value
-            report["val_best_"+main_metric]=report.pop("best_metric")
-            
-            # run validation again on the val_set to get the predicted probabilities
-            model_outputs, true_labels = trainer.evaluate_model(val_loader, metrics=[], return_preds=True)
-            # save the probabilities in the kwargs
-            kwargs["val_preds"] = sigmoid(torch.cat(model_outputs).float().cpu().numpy().reshape(-1))
-            # cross-verify that the val data order was not shuffled and is in the same order as val_ids
+                for metric, value in report[key].items():
+                    result[key.replace('_metrics','_curve_')+metric]=value
+                    
+            # VALIDATE AGAIN on the val_set to get the predicted probabilities
+            print("----------------------\nEvaluation on validation data again: \n----------------------")
+            trainer.model = report['best_model']
+            model_outputs, true_labels, val_report = trainer.evaluate_model(val_loader, 
+                                                                         metrics=metrics,
+                                                                         return_results=True)                       
+            # save the probabilities in the results
+            def sigmoid(m): return 1/(1+np.exp(-m))            
+            result["val_preds"] = sigmoid(torch.cat(model_outputs).float().cpu().numpy().reshape(-1))
+            # cross-verify that the order of val_data was not shuffled and is in the same order as val_ids
             true_labels = torch.cat(true_labels).float().cpu().numpy().reshape(-1)
-            assert (kwargs['val_lbls'] == true_labels).all(), "val_loader's data order is not in the expected order"
+            assert (result['val_lbls'] == true_labels).all(), \
+"val_loader's data is not in the expected order"
             
-            result = kwargs
-            result.update(report)     
-            result.update(params_log)
-            result.update({"runtime":int((datetime.now() - start_time).total_seconds())})
-            # save as a dataframe
+            result.update({'val_'+k:v[0] for k,v in val_report.items()})
+            
+            # TEST on an independent holdout_set, if available
+            print("----------------------\nEvaluation on holdout data: \n----------------------")
+            if X_test is not None:         
+                holdout_data = myDataset(X_test, y_test, transform=transform)
+                holdout_loader = DataLoader(holdout_data, batch_size=batch_size, shuffle=False, drop_last=False)
+                model_outputs, true_labels, hold_report = trainer.evaluate_model(holdout_loader, 
+                                                         metrics=metrics, 
+                                                         return_results=True)
+                result["hold_preds"] = sigmoid(torch.cat(model_outputs).float().cpu().numpy().reshape(-1))
+                true_labels = torch.cat(true_labels).float().cpu().numpy().reshape(-1)
+                assert (result['hold_lbls'] == true_labels).all(), \
+"holdout_loader's data is not in the expected order"
+                
+                result.update({'hold_'+k:v[0] for k,v in hold_report.items()})
+                del holdout_loader
+            
+            # calculate total elapsed runtime
+            runtime = datetime.now() - start_time
+            result.update({"runtime":int(runtime.total_seconds())})
+            # save result as a dataframe
             pd.DataFrame([result]).to_csv(join(output_dir, logfname+'.csv'))
-
-            print("Finished after {}s with val_score ({}) = {:.2f}%".format(
-                str(datetime.now() - start_time).split(".")[0],
-                main_metric, result["val_best_"+main_metric]*100))
             
+            print("---------------- CNNpipeline completed ----------------")
+            print("Ran for {}s and achieved val_score ({})= {:.2f}%".format(
+                str(runtime).split(".")[0],
+                main_metric, result["val_"+main_metric]*100))
+            
+            del net, optimizer, criterion, transform, trainer
+            del train_loader, val_loader, report
+            gc.collect()
             torch.cuda.empty_cache()
-        
-    return best_model, result
+#     return best_model.cpu(), result
 
-########################################################################################
-
-
-def evaluate_models(test_loader, model_dirs, network, gpu, output_dir):
-    """Evaluates a group of models and prints the respective binary classification 
-       accuracy, specificity, and sensitivity as well as the ROC curves.
-       
-    Parameters
-    ----------
-    test_loader: loaded test set using torch's DataLoader class
-    model_dirs: list of dirs where the best performing models from each trial was stored
-    network: network class used for classification
-        
-    Returns
-    -------
-    None
-    """
-    metrics = []
-#             trainer.visualize_training(report, metrics, save_fig_path=join(output_dir,logfname))
-#             trainer.evaluate_model(val_loader, write_to_dir=join(output_dir,logfname))
-    for trial, model_dir in enumerate(model_dirs):
-        print(f"trial {trial}")
-
-        pred_score = []
-        all_preds = []
-        all_labels = []
-        net = network().cuda(gpu)
-        net.load_state_dict(torch.load(model_dir))
-        
-        # set net to evaluation mode so that batchnorm and dropout layers are in eval mode
-        net.eval()
-        
-        with torch.no_grad():
-            for sample in test_loader:
-                img = sample["image"]
-                label = sample["label"]
-
-                img = img.to(torch.device(gpu))
-
-                output = net.forward(img)
-                pred_score.append(torch.sigmoid(output).cpu().numpy().item())
-                # NOTE: As mentioned ealier, our last layer is linear, and so we need to send it
-                #       through a sigmoid and then threshold the output to convert it to binary
-                #       labels.
-                pred = torch.sigmoid(output) >= 0.5
-                all_preds.append(pred.cpu().numpy().item())
-                all_labels.append(label.numpy().item())
-
-        balanced_acc = binary_balanced_accuracy(all_labels, all_preds)
-        specif = specificity(all_labels, all_preds)
-        sensi = sensitivity(all_labels, all_preds)
-        print(f"Balanced Accuracy: {balanced_acc}")
-        print(f"Specificity: {specif}")
-        print(f"Sensitivity: {sensi}\n")
-        # NOTE: The roc_curve function from sklearn uses true labels and the pred_score. This
-        #       means it needs the non thresholded output of the last layer.
-        fpr, tpr, _ = roc_curve(all_labels, pred_score)
-        roc_auc = auc(fpr, tpr)
-        print_roc_and_auc(fpr, tpr, roc_auc)
-        plt.savefig(output_dir+f"/trial{trial}_holdout_roc.png")
-        # Here we set the net back to training mode before moving on to the next net to evaluate.
-        net.train()
-        metrics.append([balanced_acc, specif, sensi])
-    metrics = np.array(metrics)
-    print("######## Final results ########")
-    print(f"Binary balanced accuracy mean: {np.mean(metrics[:, 0])*100:.2f} %")
-    print(f"Specificity mean: {np.mean(metrics[:, 1])*100:.2f} %")
-    print(f"Sensitivity mean: {np.mean(metrics[:, 2])*100:.2f} %")
-    
 #################################################################################################################
     
 def check_gpu_status(gpus):
@@ -290,6 +259,12 @@ def check_gpu_status(gpus):
           ")
     return devices
 
+from scipy.stats import chi2_contingency, chi2
+def run_chi_sq(data, confs):
 
-def sigmoid(m):
-    return 1/(1+np.exp(-m))
+    df = pd.DataFrame()
+    for c in confs:
+        chi, p, dof, _ = chi2_contingency(pd.crosstab(data['y'], data[c]))
+        result = {"y":'y', "c":c, "chi":chi, "p-value":p, "dof":dof}
+        df = df.append(result, ignore_index=True)
+    return df
