@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import shapiro, levene, ttest_ind, bartlett
+from statannot import add_stat_annotation
 
 class IMAGEN_descriptive:
     """ Plot the demographic statistics """
@@ -126,6 +127,9 @@ class IMAGEN_descriptive:
             axes[i+1].set_title(title[i])
             sns.violinplot(x="Class", y=j, data=self.DF, order=['HC', 'AAM'],
                            inner="quartile", ax = axes[i+1], palette="Set1")
+            add_stat_annotation(ax = axes[i+1], data=self.DF, x="Class", y=j,
+                                box_pairs = [("HC","AAM")], order=["HC","AAM"], test='t-test_ind',
+                                text_format='star', loc='inside')
                 
         # violin plot
         sns.set(style="whitegrid", font_scale=1.5)
@@ -140,7 +144,6 @@ class IMAGEN_descriptive:
             sns.violinplot(x="Class", y=j, hue='Sex', data=self.DF,
                            order=['HC', 'AAM'], inner="quartile",
                            ax = axes[i+1], split=True, palette="Set2")
-        #print(self.DF.groupby("Class")[columns].mean())
 
     def catplot(self, save=False):
         """ Plot the catplot
@@ -173,7 +176,7 @@ class IMAGEN_descriptive:
                         split=True, height=4, aspect=.7, palette="Set2")
             
     def categorical_plot(self, save=False):
-        """ Plot the barplot
+        """ Plot the barplot # change it lineplot
         
         Parameters
         ----------
