@@ -24,7 +24,7 @@ class IMAGEN_descriptive:
         
         """
         self.DF = DF
-        self.Columns = list(COL[:-3])
+        self.Columns = list(COL[:-6])
         self.Target = list(COL[-1:])
 
     def histogram(self, bins=False, save=False):
@@ -275,7 +275,7 @@ class IMAGEN_inference(IMAGEN_descriptive):
         
         """
         self.DF = DF
-        self.Columns = list(COL[:-3])
+        self.Columns = list(COL[:-6])
         self.Target = list(COL[-1:])
         
     def inference_statistics(self):
@@ -331,7 +331,7 @@ class IMAGEN_statistics(IMAGEN_inference):
         
         """
         self.DF = DF
-        self.Columns = list(COL[:-3])
+        self.Columns = list(COL[:-6])
         self.Target = list(COL[-1:])
         
     def to_statistics(self):

@@ -1,13 +1,13 @@
 #################################################################################
 """ IMAGEN Instrument Loader using H5DF file in all Session """
-# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 16th August 2021
+# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 7th September 2021
 #
 import os
 import h5py
 import pandas as pd
 import numpy as np
 
-class IMAGEN_instrument:
+class Instrument_loader:
     def __init__(self, DATA_DIR="/ritter/share/data/IMAGEN"):
         """ Set up path
         
@@ -139,6 +139,9 @@ class IMAGEN_instrument:
         # ID, Sex, Site, Class columns           #
         # -------------------------------------- #
         DF_2 = self.DF.set_index('ID').reindex(self.ALL)
+        DF_2['Data'] = self.h5py_file[:-3]
+        DF_2['Session'] = self.SESSION
+        DF_2['ID'] = DF_2.index
         DF_2['Sex'] = self.SEX
         DF_2['Site'] = self.SITE
         DF_2['Class'] = self.CLASS
@@ -162,7 +165,8 @@ class IMAGEN_instrument:
             self.Variables = [
                 'Neuroticism mean','Extroversion mean','Openness mean',
                 'Agreeableness mean','Conscientiousness mean',
-                'Sex','Site','Class']
+                'Session','Data','ID','Sex','Site','Class'
+            ]
         
         if self.DATA == 'SURPS':
             # Rename the columns
@@ -178,7 +182,8 @@ class IMAGEN_instrument:
             self.Variables = [
                 'Hopelessness mean','Anxiety sensitivity mean',
                 'Impulsivity mean', 'Sensation seeking mean',
-                'Sex', 'Site', 'Class']    
+                'Data','Session','ID','Sex', 'Site', 'Class'
+            ]    
 
         # -------------------------------------- #
         # ROI Columns: Socio-economic profile    #
@@ -209,7 +214,7 @@ class IMAGEN_instrument:
             self.Variables = [
                 'Emotional abuse sum','Physical abuse sum','Sexsual abuse sum',
                 'Emotional neglect sum','Physical neglect sum','Denial sum',
-                'Sex','Site','Class'
+                'Data','Session','ID','Sex','Site','Class'
             ]
 
         if self.DATA == 'LEQ':
@@ -247,7 +252,7 @@ class IMAGEN_instrument:
                 'Sexuality mean frequency','Autonomy mean frequency',
                 'Devience mean frequency','Relocation mean frequency',
                 'Distress mean frequency','Noscale mean frequency',
-                'Overall mean frequency','Sex', 'Site', 'Class']  
+                'Overall mean frequency','Data','Session','ID','Sex','Site','Class']
 
         if self.DATA == 'PBQ':
             # Generate the columns
@@ -315,18 +320,10 @@ class IMAGEN_instrument:
         
             # Set the roi variables
             self.Variables = [
-                'pbq_03','pbq_03a','pbq_03b','pbq_03c','pbq_06','pbq_06a',
+                'pbq_03','pbq_03a','pbq_03b','pbq_03c','pbq_05',
+                'pbq_05a','pbq_05b','pbq_05c','pbq_06','pbq_06a',
                 'pbq_12','pbq_13','pbq_13a','pbq_13b','pbq_13g',
-                'Sex', 'Site', 'Class'
-            ]
-        
-        if self.DATA == 'BMI':
-# ------------------------ BMI calculation needed ----------------------------- #
-            # Rename the columns
-            NEW_DF = DF_2
-            # Set the roi variables
-            self.Variables = [
-                'Sex', 'Site', 'Class'
+                'Data','Session','ID','Sex', 'Site', 'Class'
             ]
         
         if self.DATA == 'GEN':
@@ -363,7 +360,7 @@ class IMAGEN_instrument:
             self.Variables = [
                 'Disorder_PF_1','Disorder_PF_2','Disorder_PF_3','Disorder_PF_4',
                 'Disorder_PM_1','Disorder_PM_2','Disorder_PM_3','Disorder_PM_4',
-                'Disorder_PM_5','Disorder_PM_6','Sex', 'Site', 'Class'
+                'Disorder_PM_5','Disorder_PM_6','Session','Data','Sex', 'Site', 'Class'
             ]
         
         if self.DATA == 'CTS':
@@ -381,7 +378,8 @@ class IMAGEN_instrument:
             self.Variables = [
                 'Assault mean','Injury mean','Negotiation mean',
                 'Psychological aggression mean','Sexual coercion mean',
-                'Sex','Site','Class']
+                'Data','Session','ID','Sex','Site','Class'
+            ]
 
         # -------------------------------------- #
         # ROI Columns: Other co-morbidities      #
@@ -398,7 +396,7 @@ class IMAGEN_instrument:
             NEW_DF = DF_2
             # Set the roi variables
             self.Variables = [
-                'Nicotine dependence','Sex','Site','Class'
+                'Nicotine dependence','Data','Session','ID','Sex','Site','Class'
             ]       
 
 #         def DAST_SESSION(SESSION):
@@ -505,10 +503,10 @@ class IMAGEN_instrument:
         if viz == True:
             print(f"{'-'*83} \n{self.__str__()} \n{'-'*83}")
             print(f"{self.NEW_DF.info(), self.NEW_DF.describe()}")
-        return self.NEW_DF, self.Variables
+        return self.NEW_DF
 
-    def to_instrument(self, h5py_file, SESSION, instrument_file,
-                      DATA, save=False, viz=False):
+    def get_instrument(self, h5py_file, SESSION, instrument_file,
+                       DATA, save=False, viz=False):
         """ Load the HDF5, INSTRUMENT. And generate the new instruemnt
 
         Parameters
@@ -542,20 +540,20 @@ class IMAGEN_instrument:
         Examples
         --------
         >>> from imagen_instrumentloader import *
-        >>> binge_FU3_NEO = IMAGEN_instrument()
-        >>> df_binge_FU3_NEO, col_binge_FU3_NEO = binge_FU3_NEP.to_instrument(
+        >>> NEO = IMAGEN_instrument()
+        >>> df_binge_FU3_NEO = NEO.get_instrument(
         ...     "newlbls-fu3-espad-fu3-19a-binge-n650.h5", # h5files
         ...     "FU3",                                     # session
         ...     "IMAGEN-IMGN_NEO_FFI_FU3.csv",             # instrument
         ...     "NEO",                                     # roi name
         ...     save = False,                              # save
-        ...     viz = True)                                # summary
+        ...     viz = False)                               # summary
         
         """
         self.load_HDF5(h5py_file)
         self.load_INSTRUMENT(SESSION, DATA, instrument_file)
         self.generate_new_instrument(save, viz)
-        return self.NEW_DF, self.Variables
+        return self.NEW_DF
     
     def __str__(self):
         """ Print the instrument loader steps """
@@ -577,8 +575,8 @@ class IMAGEN_instrument:
                + "\n        The dataset contains " + str(self.NEW_DF.shape[0]) \
                + " samples and " + str(self.NEW_DF.shape[1]) + " columns" \
                + "\n        Variables = " + str(self.Variables)
-
-class IMAGEN_quick:
+    
+class IMAGEN_instrument(Instrument_loader):
     def __init__(self, DATA_DIR="/ritter/share/data/IMAGEN"):
         """ Set up path
         
@@ -589,8 +587,47 @@ class IMAGEN_quick:
         
         """
         self.DATA_DIR = DATA_DIR
+    
+    def to_instrument(self, merge_list, merge_key, save=False):
+        """ Merge the instrument files
         
-    def to_instrument(self, instrument_path, viz=False):
+        Parameters
+        ----------
+        merge_list : list
+            The IMAGEN instruments list
+            
+        merge_key : list
+            The IMAGEN instruments group name: BL, FU1, FU2, FU3
+        
+        save : Boolean, optional
+            If it is true, save the file
+
+        Returns
+        -------        
+        self.DF : pandas.dataframe
+            The instrument file (*.csv)
+        
+        Examples
+        --------
+        >>> from imagen_instrumentloader import *
+        >>> binge_NEO = IMAGEN_instrument()
+        >>> df_binge_FU3_NEO = binge_NEO.to_instrument(
+        ...     "IMAGEN-IMGN_NEO_FFI_FU3.csv",             # instrument
+        ...     viz = True)                                # summary        
+        
+        """
+        NEW2_DF = pd.concat(merge_list, keys=merge_key)
+        if save == True:
+            phenotype = self.h5py_file.replace(".h5", "")
+            save_absolute_path = f"{self.DATA_DIR}/Instrument/"+\
+                                 f"{phenotype}_{self.DATA}.csv"
+            # set the save option
+            if not os.path.isdir(os.path.dirname(save_absolute_path)):
+                os.makedirs(os.path.dirname(save_absolute_path))
+            NEW2_DF.to_csv(save_absolute_path, index=None)
+        return NEW2_DF
+        
+    def read_instrument(self, instrument_path, viz=False):
         """ Select instrument file and get the columns
         
         Parameters
@@ -606,27 +643,24 @@ class IMAGEN_quick:
         self.DF : pandas.dataframe
             The instrument file (*.csv)
         
-        self.VARIABLES : string
-            Instruments columns: ROI Columns, Sex, Site, Class
-
         Examples
         --------
         >>> from imagen_instrumentloader import *
-        >>> binge_FU3_NEO = IMAGEN_qurick()
-        >>> df_binge_FU3_NEO, col_binge_FU3_NEO = binge_FU3_NEP.to_instrument(
-        ...     "IMAGEN-IMGN_NEO_FFI_FU3.csv",             # instrument
-        ...     viz = True)                                # summary        
+        >>> NEO = IMAGEN_instrument()
+        >>> df_binge_FU3_NEO = NEO.read_instrument(
+        ...     "IMAGEN-IMGN_NEO_FFI_FU3.csv", # instrument
+        ...     viz = True)                    # summary        
         
         """
         self.instrument_path = instrument_path
         instrument_path = f"{self.DATA_DIR}/Instrument/{instrument_path}"
-        self.DF = pd.read_csv(instrument_path, low_memory=False).set_index('ID')
+        self.DF = pd.read_csv(instrument_path, low_memory=False)
         self.VARIABLES = list(self.DF.columns)
         
         if viz == True:
             print(f"{'-'*83} \n{self.__str__()} \n{'-'*83}")
             print(f"{self.DF.info(), self.DF.describe()}")
-        return self.DF, self.VARIABLES
+        return self.DF
     
     def __str__(self):
         """ Print the instrument loader steps """
