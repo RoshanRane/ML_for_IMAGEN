@@ -6,6 +6,8 @@ import os
 import h5py
 import pandas as pd
 import numpy as np
+import warnings
+warnings.filterwarnings('ignore')
 
 class Instrument_loader:
     def __init__(self, DATA_DIR="/ritter/share/data/IMAGEN"):
@@ -105,7 +107,7 @@ class Instrument_loader:
     def generate_new_instrument(self, save=False, viz=False):
         """ Generate the new instrument,
         Rows: Subjects by ID HDF5 & INSTRUMENT
-        Cols: ID, ROI Columns, Sex, Site, Class (HC, AAM)
+        Cols: ROI Columns, Data, Session, ID, Sex, Site, Class (HC, AAM)
 
         Parameters
         ----------   
@@ -121,15 +123,15 @@ class Instrument_loader:
             The new instrument file (*.csv)
         
         self.Variables : string
-            Instruments columns: ROI Columns, Sex, Site, Class
+            Instruments columns: ROI Columns, Data, Session, ID, Sex, Site, Class
         
         Notes
         -----
         This function rename the columns and select the ROI columns:
             Psychological profile:
-                NEO, SURPS,
+                NEO, SURPS
             Socio-economic profile:
-                LEQ, CTQ, PBQ, BMI, GEN, CTS,
+                CTQ, LEQ, PBQ, CTS, GEN
             Other co-morbidities:
                 FTND, DAST, SCID, DMQ, BSI, AUDIT, MAST 
         It may adjust the data type and values.
@@ -149,7 +151,6 @@ class Instrument_loader:
         # -------------------------------------- #
         # ROI Columns: Psychological profile     #
         # -------------------------------------- #
-        
         if self.DATA == 'NEO':
             # Rename the columns
             NEW_DF = DF_2.rename(
@@ -167,6 +168,7 @@ class Instrument_loader:
                 'Agreeableness mean','Conscientiousness mean',
                 'Session','Data','ID','Sex','Site','Class'
             ]
+            self.NEW_DF = NEW_DF[self.Variables]
         
         if self.DATA == 'SURPS':
             # Rename the columns
@@ -183,31 +185,25 @@ class Instrument_loader:
                 'Hopelessness mean','Anxiety sensitivity mean',
                 'Impulsivity mean', 'Sensation seeking mean',
                 'Data','Session','ID','Sex', 'Site', 'Class'
-            ]    
+            ]
+            self.NEW_DF = NEW_DF[self.Variables]
 
         # -------------------------------------- #
         # ROI Columns: Socio-economic profile    #
         # -------------------------------------- #
-
         if self.DATA == 'CTQ':
-            emot_abuse = ['CTQ_3','CTQ_8','CTQ_14','CTQ_18','CTQ_25']
-            phys_abuse = ['CTQ_9','CTQ_11','CTQ_12','CTQ_15','CTQ_17']
-            sexual_abuse = ['CTQ_20','CTQ_21','CTQ_23','CTQ_24','CTQ_27']
-            emot_neglect = ['CTQ_5','CTQ_7','CTQ_13','CTQ_19','CTQ_28']
-            phys_neglect = ['CTQ_1','CTQ_2','CTQ_4','CTQ_6','CTQ_26']
+            emot_abu = ['CTQ_3','CTQ_8','CTQ_14','CTQ_18','CTQ_25']
+            phys_abu = ['CTQ_9','CTQ_11','CTQ_12','CTQ_15','CTQ_17']
+            sexual_abu = ['CTQ_20','CTQ_21','CTQ_23','CTQ_24','CTQ_27']
+            emot_neg = ['CTQ_5','CTQ_7','CTQ_13','CTQ_19','CTQ_28']
+            phys_neg = ['CTQ_1','CTQ_2','CTQ_4','CTQ_6','CTQ_26']
             denial = ['CTQ_10','CTQ_16','CTQ_22']
-            
             # Generate the columns
-            DF_2['Emotional abuse sum'] = DF_2[emot_abuse].sum(axis=1,
-                                                               skipna=False)
-            DF_2['Physical abuse sum'] = DF_2[phys_abuse].sum(axis=1,
-                                                              skipna=False)
-            DF_2['Sexsual abuse sum'] = DF_2[sexual_abuse].sum(axis=1,
-                                                               skipna=False)
-            DF_2['Emotional neglect sum'] = DF_2[emot_neglect].sum(axis=1,
-                                                                   skipna=False)
-            DF_2['Physical neglect sum'] = DF_2[phys_neglect].sum(axis=1,
-                                                                  skipna=False)
+            DF_2['Emotional abuse sum'] = DF_2[emot_abu].sum(axis=1,skipna=False)
+            DF_2['Physical abuse sum'] = DF_2[phys_abu].sum(axis=1,skipna=False)
+            DF_2['Sexsual abuse sum'] = DF_2[sexual_abu].sum(axis=1,skipna=False)
+            DF_2['Emotional neglect sum'] = DF_2[emot_neg].sum(axis=1,skipna=False)
+            DF_2['Physical neglect sum'] = DF_2[phys_neg].sum(axis=1,skipna=False)
             DF_2['Denial sum'] = DF_2[denial].sum(axis=1, skipna=False)
             NEW_DF = DF_2
             # Set the roi variables
@@ -216,6 +212,7 @@ class Instrument_loader:
                 'Emotional neglect sum','Physical neglect sum','Denial sum',
                 'Data','Session','ID','Sex','Site','Class'
             ]
+            self.NEW_DF = NEW_DF[self.Variables]
 
         if self.DATA == 'LEQ':
             # Rename the columns
@@ -252,22 +249,28 @@ class Instrument_loader:
                 'Sexuality mean frequency','Autonomy mean frequency',
                 'Devience mean frequency','Relocation mean frequency',
                 'Distress mean frequency','Noscale mean frequency',
-                'Overall mean frequency','Data','Session','ID','Sex','Site','Class']
+                'Overall mean frequency',
+                'Data','Session','ID','Sex','Site','Class']
+            self.NEW_DF = NEW_DF[self.Variables]
 
         if self.DATA == 'PBQ':
             # Generate the columns
             def test(x):
                 if x == 0: return 'No'
                 elif x == 1: return 'Yes'
+                elif x == -1: return 'not known'
+                elif x == -2: return 'not available'
                 else: return np.NaN
             def day(x):
                 if x == 2: return 'yes, every day'
                 elif x == 1: return 'yes, on occasion'
                 elif x == 0: return 'no, not at all'
+                elif x == -1: return 'not known'
+                elif x == -2: return 'not available'
                 else: return np.NaN
             def age(x):
-                if x == -1: return np.NaN
-                elif x == -2: return np.NaN
+                if x == -1: return 'not known'
+                elif x == -2: return 'not available'
                 else: return x
             def cigarettes(x):
                 if x == 1: return 'Less than 1 cigarette per week'
@@ -277,12 +280,16 @@ class Instrument_loader:
                 elif x == 15: return '11-20 cigarettes per day'
                 elif x == 25: return '21-30 cigarettes per day'
                 elif x == 30: return 'More than 30 cigarettes per day'
+                elif x == -1: return 'not known'
+                elif x == -2: return 'not available'
                 else: return np.NaN
             def alcohol(x):
                 if x == 1: return 'Monthly or less'
                 elif x == 2: return 'Two to four times a month'
                 elif x == 3: return 'Two to three times a week'
                 elif x == 4: return 'Four or more times a week'
+                elif x == -1: return 'not known'
+                elif x == -2: return 'not available'
                 else: return np.NaN
             def drinks(x):
                 if x == 0: return '1 or 2'
@@ -290,6 +297,8 @@ class Instrument_loader:
                 elif x == 2: return '5 or 6'
                 elif x == 3: return '7 to 9'
                 elif x == 4: return '10 or more'
+                elif x == -1: return 'not known'
+                elif x == -2: return 'not available'
                 else: return np.NaN
             def stage(x):
                 if x == 1: return 'first trimester'
@@ -299,25 +308,28 @@ class Instrument_loader:
                 elif x == 23: return 'second and third'
                 elif x == 13: return 'first and third'
                 elif x == 4: return 'whole pregnancy'
+                elif x == -1: return 'not known'
+                elif x == -2: return 'not available'
                 else: return np.NaN
-            
+            # Rename the values
             DF_2["pbq_03"] = DF_2['pbq_03'].apply(test)
             DF_2['pbq_03a'] = DF_2['pbq_03a'].apply(day)
             DF_2['pbq_03b'] = DF_2['pbq_03b'].apply(age)
-            DF_2["pbq_05"] = DF_2['pbq_05'].apply(test)
-            DF_2["pbq_06"] = DF_2['pbq_06'].apply(test)
-            DF_2["pbq_12"] = DF_2['pbq_12'].apply(test)
-            DF_2["pbq_13"] = DF_2['pbq_13'].apply(test)
             DF_2["pbq_03c"] = DF_2['pbq_03c'].apply(cigarettes)
+            DF_2["pbq_05"] = DF_2['pbq_05'].apply(test)
             DF_2["pbq_05a"] = DF_2['pbq_05a'].apply(cigarettes)
             DF_2["pbq_05b"] = DF_2['pbq_05b'].apply(cigarettes)
             DF_2["pbq_05c"] = DF_2['pbq_05c'].apply(cigarettes)
+            DF_2["pbq_06"] = DF_2['pbq_06'].apply(test)
             DF_2["pbq_06a"] = DF_2['pbq_06a'].apply(cigarettes)
+            DF_2["pbq_12"] = DF_2['pbq_12'].apply(test)
+            DF_2["pbq_13"] = DF_2['pbq_13'].apply(test)
             DF_2["pbq_13a"] = DF_2['pbq_13a'].apply(alcohol)
             DF_2["pbq_13b"] = DF_2['pbq_13b'].apply(drinks)
             DF_2["pbq_13g"] = DF_2['pbq_13g'].apply(stage)    
+            # Rename the columns
+# It can be            
             NEW_DF = DF_2
-        
             # Set the roi variables
             self.Variables = [
                 'pbq_03','pbq_03a','pbq_03b','pbq_03c','pbq_05',
@@ -325,44 +337,18 @@ class Instrument_loader:
                 'pbq_12','pbq_13','pbq_13a','pbq_13b','pbq_13g',
                 'Data','Session','ID','Sex', 'Site', 'Class'
             ]
-        
-        if self.DATA == 'GEN':
-            # Generate the columns
-            def disorder(x):
-                if x == 'SCZ': return 'Schizophrenia'
-                elif x == 'SCZAD': return 'Schizoaffective Disorder'
-                elif x == 'DPR_R': return 'Major Depression recurrent'
-                elif x == 'DPR_SE': return 'Major Depression single episode'
-                elif x == 'BIP_I': return 'Bipolar I Disorder'
-                elif x == 'BIP_II': return 'Bipolar II Disorder'
-                elif x == 'OCD': return 'Obessive-compulsive Disroder'
-                elif x == 'ANX': return 'Anxiety Disorder'
-                elif x == 'EAT': return 'Eating Disorder'
-                elif x == 'ALC': return 'Alcohol problems'
-                elif x == 'DRUG': return 'Drug problems'
-                elif x == 'SUIC': return 'Suicide / Suicidal Attempt'
-                elif x == 'OTHER': return 'Other'
-                else: return np.NaN
-            
-            DF_2['Disorder_PF_1'] = DF_2['Disorder_PF_1'].apply(disorder)
-            DF_2['Disorder_PF_2'] = DF_2['Disorder_PF_2'].apply(disorder)
-            DF_2['Disorder_PF_3'] = DF_2['Disorder_PF_3'].apply(disorder)
-            DF_2['Disorder_PF_4'] = DF_2['Disorder_PF_4'].apply(disorder)
-            DF_2['Disorder_PM_1'] = DF_2['Disorder_PM_1'].apply(disorder)
-            DF_2['Disorder_PM_2'] = DF_2['Disorder_PM_2'].apply(disorder)
-            DF_2['Disorder_PM_3'] = DF_2['Disorder_PM_3'].apply(disorder)
-            DF_2['Disorder_PM_4'] = DF_2['Disorder_PM_4'].apply(disorder)
-            DF_2['Disorder_PM_5'] = DF_2['Disorder_PM_5'].apply(disorder)
-            DF_2['Disorder_PM_6'] = DF_2['Disorder_PM_6'].apply(disorder)
-            NEW_DF = DF_2
-            
-            # Set the roi variables
-            self.Variables = [
-                'Disorder_PF_1','Disorder_PF_2','Disorder_PF_3','Disorder_PF_4',
-                'Disorder_PM_1','Disorder_PM_2','Disorder_PM_3','Disorder_PM_4',
-                'Disorder_PM_5','Disorder_PM_6','Session','Data','Sex', 'Site', 'Class'
-            ]
-        
+            Check_DF = NEW_DF[self.Variables]
+            # Exclude the row
+            # Duplicate ID: 71766352, 58060181, 15765805, 15765805 in FU1
+            # Different ID: 12809392 in both BL and FU1
+            for i in [71766352, 58060181, 15765805, 12809392]:
+                is_out = (Check_DF['ID']==i) & (Check_DF['Session']=='FU1')
+                Check_DF = Check_DF[~is_out]
+            for i in [12809392]:
+                is_out = (Check_DF['ID']==i) & (Check_DF['Session']=='BL')
+                Check_DF = Check_DF[~is_out]
+            self.NEW_DF = Check_DF
+
         if self.DATA == 'CTS':
             # Rename the columns
             NEW_DF = DF_2.rename(
@@ -380,11 +366,58 @@ class Instrument_loader:
                 'Psychological aggression mean','Sexual coercion mean',
                 'Data','Session','ID','Sex','Site','Class'
             ]
+            self.NEW_DF = NEW_DF[self.Variables]
+        
+        if self.DATA == 'GEN':
+            # Generate the columns
+            def disorder(x):
+                if x == 'ALC': return 'Alcohol problems'
+                elif x == 'DRUG': return 'Drug problems'
+                elif x == 'SCZ': return 'Schizophrenia'
+                elif x == 'SCZAD': return 'Schizoaffective Disorder'
+                elif x == 'DPR_R': return 'Major Depression recurrent'
+                elif x == 'DPR_SE': return 'Major Depression single episode'
+                elif x == 'BIP_I': return 'Bipolar I Disorder'
+                elif x == 'BIP_II': return 'Bipolar II Disorder'
+                elif x == 'OCD': return 'Obessive-compulsive Disroder'
+                elif x == 'ANX': return 'Anxiety Disorder'
+                elif x == 'EAT': return 'Eating Disorder'
+                elif x == 'SUIC': return 'Suicide / Suicidal Attempt'
+                elif x == 'OTHER': return 'Other'
+                else: return np.NaN
+            # Rename the values
+            DF_2['Disorder_PF_1'] = DF_2['Disorder_PF_1'].apply(disorder)
+            DF_2['Disorder_PF_2'] = DF_2['Disorder_PF_2'].apply(disorder)
+            DF_2['Disorder_PF_3'] = DF_2['Disorder_PF_3'].apply(disorder)
+            DF_2['Disorder_PF_4'] = DF_2['Disorder_PF_4'].apply(disorder)
+            DF_2['Disorder_PM_1'] = DF_2['Disorder_PM_1'].apply(disorder)
+            DF_2['Disorder_PM_2'] = DF_2['Disorder_PM_2'].apply(disorder)
+            DF_2['Disorder_PM_3'] = DF_2['Disorder_PM_3'].apply(disorder)
+            DF_2['Disorder_PM_4'] = DF_2['Disorder_PM_4'].apply(disorder)
+            DF_2['Disorder_PM_5'] = DF_2['Disorder_PM_5'].apply(disorder)
+            DF_2['Disorder_PM_6'] = DF_2['Disorder_PM_6'].apply(disorder)
+            NEW_DF = DF_2
+            Variables = [
+                'Disorder_PF_1','Disorder_PF_2','Disorder_PF_3','Disorder_PF_4',
+                'Disorder_PM_1','Disorder_PM_2','Disorder_PM_3','Disorder_PM_4',
+                'Disorder_PM_5','Disorder_PM_6','Session','ID','Data','Sex','Site','Class'
+            ]
+            Check_DF = NEW_DF[Variables]
+            Check_DF['Paternal_disorder'] = Check_DF.loc[:, Check_DF.columns[:4]].apply(
+                lambda x: ','.join(x.dropna().astype(str)), axis=1)
+            Check_DF['Maternal_disorder'] = Check_DF.loc[:, Check_DF.columns[4:9]].apply(
+                lambda x: ','.join(x.dropna().astype(str)), axis=1)
 
+            # Set the roi variables
+            self.Variables = [
+                'Paternal_disorder','Maternal_disorder',
+                'Session','ID','Data','Sex','Site','Class'
+            ]
+            self.NEW_DF = Check_DF[self.Variables]
+            
         # -------------------------------------- #
         # ROI Columns: Other co-morbidities      #
         # -------------------------------------- #
-
         if self.DATA == 'FTND':
             # Generate the columns
             def test(x):
@@ -397,7 +430,8 @@ class Instrument_loader:
             # Set the roi variables
             self.Variables = [
                 'Nicotine dependence','Data','Session','ID','Sex','Site','Class'
-            ]       
+            ]
+            self.NEW_DF = NEW_DF[self.Variables]
 
 #         def DAST_SESSION(SESSION):
 #             if SESSION == 'FU3':
@@ -486,10 +520,9 @@ class Instrument_loader:
 #                 DATA_DF = self.NEW_DF[Variables]
 #                 return Variables, DATA_DF
 #         elif 'MAST' == self.DATA: # 'MAST'
-#             self.VARIABLES, self.NEW_DF2 = MAST_SESSION(self.SESSION)        
+#             self.VARIABLES, self.NEW_DF2 = MAST_SESSION(self.SESSION)  
+#         self.NEW_DF = NEW_DF[self.Variables]
 #################################################################################
-
-        self.NEW_DF = NEW_DF[self.Variables]
     
         if save == True:
             phenotype = self.h5py_file.replace(".h5", "")

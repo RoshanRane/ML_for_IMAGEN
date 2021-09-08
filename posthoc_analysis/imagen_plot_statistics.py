@@ -1,6 +1,6 @@
 #################################################################################
 """ IMAGEN Instrument Summary Statistic """
-# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 16th August 2021
+# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 8th September 2021
 #
 import math
 import pandas as pd
@@ -8,6 +8,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import shapiro, levene, ttest_ind, bartlett
 from statannot import add_stat_annotation
+import warnings
+warnings.filterwarnings('ignore')
 
 class IMAGEN_descriptive:
     """ Plot the demographic statistics """
@@ -118,7 +120,7 @@ class IMAGEN_descriptive:
         # violin plot
         sns.set(style="whitegrid", font_scale=1.5)
         fig, axes = plt.subplots(nrows=1, ncols=len(columns)+1,
-                                 figsize=((len(columns)+1)**2, len(columns)+1))
+                                 figsize=((len(columns*2)+1)**2, len(columns*2)+1))
 
         sns.countplot(x="Class", hue='Sex', order=['HC', 'AAM'],
                       data = self.DF, ax = axes[0], palette="Set2")
@@ -134,7 +136,7 @@ class IMAGEN_descriptive:
         # violin plot
         sns.set(style="whitegrid", font_scale=1.5)
         fig, axes = plt.subplots(nrows=1, ncols=len(columns)+1,
-                                     figsize=((len(columns)+1)**2, len(columns)+1))
+                                     figsize=((len(columns*2)+1)**2, len(columns*2)+1))
 
         sns.countplot(x="Class", hue='Sex', data = self.DF, order=['HC', 'AAM'],
                           ax = axes[0], palette="Set2")
