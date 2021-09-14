@@ -32,7 +32,10 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
     # calculate p_values if permutation tests were run
     if f"permuted_{x}" in df.columns:
         df = calc_p_values(df, x)
-        
+    
+    # hack: for compatability between old MLpipeline and new DLpipeline
+    if "technique" not in df and "conf_ctrl_tech" in df:
+        df = df.rename(columns={"conf_ctrl_tech":"technique"})
     # if conf_ctrl is not configured then automatically determine it
     if not conf_ctrl: 
         conf_ctrl = df["technique"].unique()
@@ -45,7 +48,7 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
     if x not in df.columns:
         df = compute_metric(df, x)
     
-    # make io labels readable with latex formating
+    # make io labels latex formated
     df.loc[:,"io"] = df.apply(remap_io, axis=1)
     df[x] = df[x].apply(lambda x: x*100)   
     
@@ -64,20 +67,23 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
         df = combine_io_sample_size(df)
         y="io_n" 
     y_order = get_y_order(df, y, sorty_by)
-    
     for ((t, dfi), ax) in zip(df.groupby("technique"), axes):   
         
+        assert (len(set(y_order) - set(dfi[y].unique())))==0
         all_models = dfi["model"].unique()
         # plotting details
         palette = sns.color_palette()
-        ci, dodge, scale, errwidth, capsize = 95, 0.4, 0.4, 0.9, 0.08     
-        hue_order= [m for m in ["LR", "SVM-lin", "SVM-rbf", "GB"] if m in all_models]
-        # todo bugfix ci is sensible only if each trial score is statistically independant
+        ci, dodge, scale, errwidth, capsize = 95, 0.4, 0.4, 0.9, 0.08  
+        ML_MODELS = ["LR", "SVM-lin", "SVM-rbf", "GB"]
+        hue_order= [m for m in ML_MODELS if m in all_models]
+        # if none of the ML_MODELS are in this df then don't differentiate by model
+        if len(hue_order)==0: hue_order=None
+        
         ax = sns.pointplot(y=y, x=x, order=y_order,
                            hue="model", hue_order=hue_order,
                            join=join, data=dfi, ax=ax,
                            ci=ci, errwidth=errwidth, capsize=capsize,
-                           dodge=dodge, scale=scale, palette=palette)
+                           dodge=dodge, scale=scale, palette=palette)# todo bugfix ci is sensible only if each trial score is statistically independant
         ax.legend_.remove()
         ax.set_title("{} (ave. n={:.0f})".format(t.upper(), dfi["n_samples"].mean()))
         ax.set_xlabel(x)
@@ -85,7 +91,6 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
 
         # Add significance stars if permutation scores are available
         if f"permuted_{x}" in dfi.columns:
-            
             # collect p_values as a dict of form {mean_accuracy: p_value}
             p_dict = {g[x].mean(): g["p_value"].iloc[0] 
                       for i, g in dfi.groupby(["io", "model"])}
@@ -257,7 +262,6 @@ def get_y_order(df, y="io", sorty_by=None):
 
 
 ## METRICS ##
-
 def specificity_score(y_true, y_pred):
     tn, fp, fn, tp = metrics.confusion_matrix(y_true, y_pred).ravel()
     return tn/(tn+fp)
