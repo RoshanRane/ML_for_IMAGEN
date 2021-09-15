@@ -1,6 +1,6 @@
 #################################################################################
 """ IMAGEN Instrument Loader using H5DF file in all Session """
-# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 7th September 2021
+# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 15th September 2021
 #
 import os
 import h5py
@@ -137,9 +137,9 @@ class Instrument_loader:
         It may adjust the data type and values.
         
         """
-        # -------------------------------------- #
-        # ID, Sex, Site, Class columns           #
-        # -------------------------------------- #
+        # ----------------------------------------------------- #
+        # Data, Session, ID, Sex, Site, Class columns           #
+        # ----------------------------------------------------- #
         DF_2 = self.DF.set_index('ID').reindex(self.ALL)
         DF_2['Data'] = self.h5py_file[:-3]
         DF_2['Session'] = self.SESSION
@@ -148,9 +148,9 @@ class Instrument_loader:
         DF_2['Site'] = self.SITE
         DF_2['Class'] = self.CLASS
         
-        # -------------------------------------- #
-        # ROI Columns: Psychological profile     #
-        # -------------------------------------- #
+        # ----------------------------------------------------- #
+        # ROI Columns: Psychological profile                    #
+        # ----------------------------------------------------- #
         if self.DATA == 'NEO':
             # Rename the columns
             NEW_DF = DF_2.rename(
@@ -188,9 +188,9 @@ class Instrument_loader:
             ]
             self.NEW_DF = NEW_DF[self.Variables]
 
-        # -------------------------------------- #
-        # ROI Columns: Socio-economic profile    #
-        # -------------------------------------- #
+        # ----------------------------------------------------- #
+        # ROI Columns: Socio-economic profile                   #
+        # ----------------------------------------------------- #
         if self.DATA == 'CTQ':
             emot_abu = ['CTQ_3','CTQ_8','CTQ_14','CTQ_18','CTQ_25']
             phys_abu = ['CTQ_9','CTQ_11','CTQ_12','CTQ_15','CTQ_17']
@@ -328,7 +328,7 @@ class Instrument_loader:
             DF_2["pbq_13b"] = DF_2['pbq_13b'].apply(drinks)
             DF_2["pbq_13g"] = DF_2['pbq_13g'].apply(stage)    
             # Rename the columns
-# It can be            
+# It can be rename the columns           
             NEW_DF = DF_2
             # Set the roi variables
             self.Variables = [
@@ -415,9 +415,9 @@ class Instrument_loader:
             ]
             self.NEW_DF = Check_DF[self.Variables]
             
-        # -------------------------------------- #
-        # ROI Columns: Other co-morbidities      #
-        # -------------------------------------- #
+        # ----------------------------------------------------- #
+        # ROI Columns: Other co-morbidities                     #
+        # ----------------------------------------------------- #
         if self.DATA == 'FTND':
             # Generate the columns
             def test(x):
@@ -433,6 +433,8 @@ class Instrument_loader:
             ]
             self.NEW_DF = NEW_DF[self.Variables]
 
+#################################################################################
+#         if self.DATA == 'DAST':
 #         def DAST_SESSION(SESSION):
 #             if SESSION == 'FU3':
 #                 Variables = ['sex', 'site', 'class']
@@ -441,7 +443,7 @@ class Instrument_loader:
 #             if 'DAST' == self.DATA: # 'DAST'
 #                 self.VARIABLES, self.NEW_DF2 = DAST_SESSION(self.SESSION)
 
-
+#         if self.DATA == 'SCID':
 #         def SCID_SESSION(SESSION):
 #             if SESSION == 'FU3':
 #                 Variables = ['sex', 'site', 'class']
@@ -450,7 +452,7 @@ class Instrument_loader:
 #             if 'SCID' == self.DATA: # 'SCID'
 #                 self.VARIABLES, self.NEW_DF2 = SCID_SESSION(self.SESSION)
 
-
+#         if self.DATA == 'DMQ':
 #         def DMQ_SESSION(SESSION):
 #             if SESSION == 'FU3':
 #                 Variables = ['sex', 'site', 'class']
@@ -459,7 +461,7 @@ class Instrument_loader:
 #             if 'DMQ' == self.DATA: # 'DMQ'
 #                 self.VARIABLES, self.NEW_DF2 = DMQ_SESSION(self.SESSION)
 
-
+#         if self.DATA == 'BSI':
 #         def BSI_SESSION(SESSION):
 #             if SESSION == 'FU3':
 #                 ## Somatization
@@ -504,7 +506,7 @@ class Instrument_loader:
 #                 DATA_DF = self.NEW_DF[Variables]
 #                 return Variables, DATA_DF
 
-
+#         if self.DATA == 'AUDIT':
 #         def AUDIT_SESSION(SESSION):
 #             if SESSION == 'FU3':
 #                 Variables = ['sex', 'site', 'class']
@@ -513,7 +515,7 @@ class Instrument_loader:
 #         elif 'AUDIT' == self.DATA: # 'AUDIT'
 #             self.VARIABLES, self.NEW_DF2 = AUDIT_SESSION(self.SESSION)
 
-
+#         if self.DATA == 'MAST':
 #         def MAST_SESSION(SESSION):
 #             if SESSION == 'FU3':
 #                 Variables = ['sex', 'site', 'class']
@@ -523,7 +525,6 @@ class Instrument_loader:
 #             self.VARIABLES, self.NEW_DF2 = MAST_SESSION(self.SESSION)  
 #         self.NEW_DF = NEW_DF[self.Variables]
 #################################################################################
-    
         if save == True:
             phenotype = self.h5py_file.replace(".h5", "")
             save_absolute_path = f"{self.DATA_DIR}/Instrument/"+\
