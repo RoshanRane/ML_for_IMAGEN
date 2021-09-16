@@ -122,7 +122,8 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
     # add legend: add models info and chance label
     handles, legends = ax.get_legend_handles_labels()
     leg1 = fig.legend(handles[len(chance):], legends[len(chance):], 
-                      loc="upper right", title="ML models", fancybox=True, frameon=True)
+                      title="Models",
+                      bbox_to_anchor=[1.89, 0.89], loc="upper right", fancybox=True, frameon=True)
     # only choose the first 'chance' legend
     leg2 = fig.legend([handles[0]], [legends[0]], loc="center right")
     fig.add_artist(leg1)
