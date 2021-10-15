@@ -7,7 +7,7 @@ import h5py
 import matplotlib.pyplot as plt 
 import numpy as np
 import gc, time
-import copy
+import copy, io
 
 # path
 from pathlib import Path
@@ -66,7 +66,6 @@ def cnn_pipeline(
     
     # write all outputs to a separate .log file
     logfname = f'run{run_id}'
-    kwargs = copy.deepcopy(kwargs)
     
     with open(join(output_dir, logfname)+".log", "a") as logfile:
         with redirect_stdout(logfile):
@@ -75,7 +74,6 @@ def cnn_pipeline(
                 
                 start_time = datetime.now()
                 FINISHED=False
-                print_debug = False
                 
                 params_log = {
                     "run_id":         run_id,
@@ -99,10 +97,11 @@ def cnn_pipeline(
                 \n---------------- CNNpipeline starting ----------------")
                 
                 while(not FINISHED):
+                    print_debug = False
                     try:
                         # initialize DL model on the GPU
                         lbl_classes = np.unique(y)
-                        net = model(out_classes=len(lbl_classes), **kwargs.pop('model_args')).cuda()
+                        net = model(out_classes=len(lbl_classes), **kwargs['model_args']).cuda()
                         # prepare a dict to store all results
                         result = params_log
                         result.update(kwargs)
@@ -125,8 +124,18 @@ def cnn_pipeline(
                                 weights_pretrained = weights_pretrained.replace('*','{}',1).format(run_id)
                             else:
                                 weights_pretrained = np.random.choice(glob(weights_pretrained))
-                            print("Initializing model weights using a pretrained model:",weights_pretrained)
-                            net.load_state_dict(torch.load(weights_pretrained))
+                            print("Initializing model weights from a pretrained model:",weights_pretrained)
+                            pt_model = copy.deepcopy(torch.load(weights_pretrained, 'cpu'))
+                            if pt_model == 0:
+                                print(f"[ERROR] model loading failed for {weights_pretrained}. It is probably not correctly saved.")
+                            # delete the 'final' layer parameters from the loaded model if n_classes are different
+                            final_keys = [k for k in pt_model.keys() if 'final' in k]
+                            if len(lbl_classes) != pt_model[final_keys[0]].shape[0]:
+                                for k in final_keys: del pt_model[k]
+                            missing, unexpected = net.load_state_dict(pt_model, strict=False)
+                            if missing: print(f"[WARN] missing keys in {weights_pretrained}: {missing}")
+                            if unexpected: print(f"[WARN] extra keys in {weights_pretrained}: {unexpected}")
+                            del pt_model
                         else:
                             net.apply(weights_init) # todo make this the function's argument            
                         # calculate the balancing loss weights, if requested (incase of unbalanced datasets)
@@ -222,7 +231,7 @@ def cnn_pipeline(
                             if new_batch_size>0:
                                 print(f"[OOM WARN] {e} \n:: reducing the batch_size from {batch_size} to {new_batch_size}")
                                 batch_size=new_batch_size
-                                continue
+                                print_debug=True
                             else:
                                 FINISHED=True
                                 print('[OOM ERROR]', str(e), '\nQuitting this run...')
@@ -232,27 +241,32 @@ def cnn_pipeline(
                             raise e
                     
                     # delete all tensors present on the current GPU and free up space
-                    try:
-                        for obj in gc.get_objects():
-                            if torch.is_tensor(obj) or (hasattr(obj,'data') and
-                               torch.is_tensor(obj.data) and obj.get_device()==int(str(gpu).replace('cuda:',''))):
-                                if print_debug: print(f"cuda{obj.get_device()}: ", type(obj), obj.size())                     
-                                del obj
-                    except: pass
-                    time.sleep(5)
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    time.sleep(20)
+                    clear_reset_gpu(gpu, print_debug)
                     
-                    # calculate total elapsed runtime
-                    runtime = datetime.now() - start_time
-                    result.update({"runtime":int(runtime.total_seconds())})
-                     # save result as a dataframe
-                    pd.DataFrame([result]).to_csv(join(output_dir, logfname+'.csv'))
-                    print("---------------- CNNpipeline completed ----------------")
-                    print("RAN FOR {}s".format(str(runtime).split(".")[0]))
+                # calculate total elapsed runtime
+                runtime = datetime.now() - start_time
+                result.update({"runtime":int(runtime.total_seconds())})
+                 # save result as a dataframe
+                pd.DataFrame([result]).to_csv(join(output_dir, logfname+'.csv'))
+                print("---------------- CNNpipeline completed ----------------")
+                print("RAN FOR {}s".format(str(runtime).split(".")[0]))
 #################################################################################################################
 
+# delete all tensors present on the current GPU and free up space
+def clear_reset_gpu(gpu, print_debug=False):
+    try:
+        for obj in gc.get_objects():
+            if torch.is_tensor(obj) or (hasattr(obj,'data') and
+               torch.is_tensor(obj.data) and obj.get_device()==int(str(gpu).replace('cuda:',''))):
+                if print_debug: print(f"deleting ... cuda{obj.get_device()}: ", type(obj), obj.size())                     
+                del obj
+    except: pass
+    time.sleep(5)
+    gc.collect()
+    torch.cuda.empty_cache()
+    time.sleep(20)
+    
+    
 class myDataset(Dataset):
     """Class for manipulating the IMAGEN Dataset. Inherits from the torch Dataset class.
     Parameters

@@ -36,8 +36,9 @@ torch.backends.cudnn.benchmark = True
 ### CONFIG start #############################################################
 
 # H5_FILES = [(train_data, holdout_data), ...]
-H5_FILES = [("/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-z2-bingel3u6-n*.h5",
-            "/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-hold-z2-bingel3u6-n*.h5")]
+H5_FILES = [("/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-z2-bingel3u6-n*.h5", #fullbrain-adni_*.h5",
+             "/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-hold-z2-bingel3u6-n*.h5" #fullbrain-adni-hold_*.h5",
+            )]
 
 CONF_CTRL_TECHS = ["none"] # todo test 'loo-site', 'loo-sex' 
 K_FOLD_CV = True
@@ -57,21 +58,12 @@ MODEL_SETTINGS = [
     {
     "model": FCN_3D, 
     "model_args": {'convs':[16,32,128,16], 'dropout':[0.2,0.1], 'debug_print':DEBUG},
-    "batch_size": 16, "num_epochs": 50, "earlystop_patience": 8,
+    "batch_size": 16, "num_epochs": 100, "earlystop_patience": 8,
     "criterion": nn.CrossEntropyLoss, "criterion_params": {'weight':'balanced', 'reduction':'mean'},
     "optimizer": optim.Adam, "optimizer_params": {"lr": 1e-4, "weight_decay": 1e-4},
-    "weights_pretrained": None, #"weights_pretrained": "results/pretrained_adni/run*_model-best.h5",
+    "weights_pretrained": 'results/pt_adni_ad/run*_model-best.h5', 
     "augmentations": [SagittalFlip(prob=0.5), SagittalTranslate(dist=(-2, 2)), IntensityRescale(masked=False)]
     },
-#     {
-#     "model": SixtyFourNet, 
-#     "model_args": {},
-#     "batch_size": 8, "num_epochs": 50, "earlystop_patience": 8,
-#     "criterion": nn.BCEWithLogitsLoss, "criterion_params": {'pos_weight':'balanced'},
-#     "optimizer": optim.Adam, "optimizer_params": {"lr": 1e-4, "weight_decay": 1e-4},
-#     "weights_pretrained": None,
-#     "augmentations": [SagittalFlip(prob=0.5), SagittalTranslate(dist=(-2, 2)), IntensityRescale(masked=False)]
-#     },
 ]
 ### CONFIG ends  #############################################################
 ##############################################################################
@@ -146,10 +138,13 @@ def main():
                 for i,c in enumerate(conf_names,1):
                     stratify += 100*i*data[c]
                 _, rand_idx = train_test_split(np.arange(len(data[y_name])), 
-                                    test_size=len(np.unique(stratify)), stratify=stratify)
+                                    test_size=(len(np.unique(stratify)) if len(np.unique(stratify))>10 else 10),
+                                               stratify=stratify)
+                print(f"[DEBUG] using only {len(rand_idx)} training data points")
                 for d in data:  data[d] = data[d][rand_idx]              
                 # repeat on hold out set
                 rand_idx = np.random.randint(0, len(data_hold[y_name]), size=10)
+                print(f"[DEBUG] using only {len(rand_idx)} holdout data points")
                 for d in data_hold:  data_hold[d] = data_hold[d][rand_idx]         
                 
             # prepare the "io"
