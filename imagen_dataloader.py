@@ -404,17 +404,21 @@ class Imagen:
         
         
 ####################################################################################################################
-def create_h5s(lbl_combos, name, x_tp="FU3", use_all_data=False, use_only_holdout=False, viz=0, feature_cols=".+"):
+def create_h5s(lbl_combos, name, x_tp="FU3", data_subset_to_use='trainval', viz=0, feature_cols=".+"):
     
     for csv, col, c0, c1, colname in lbl_combos:
-        if use_all_data:
+        if data_subset_to_use=='all':
             d = Imagen(exclude_holdout=False)
-        elif use_only_holdout:  
+        elif data_subset_to_use=='holdout':  
+            d = Imagen()
+            d.df = d.df_holdout
+            d.df_out = pd.DataFrame(index=d.df_holdout.index)
+        elif data_subset_to_use=='holdout':  
             d = Imagen()
             d.df = d.df_holdout
             d.df_out = pd.DataFrame(index=d.df_holdout.index)
         else:
-            d = Imagen()         
+            d = Imagen(exclude_holdout=True)         
 
         if qs_is_raw_csv[csv]:
             dfq = pd.read_csv(qs[csv], usecols=["User code", col], dtype={"User code":str})

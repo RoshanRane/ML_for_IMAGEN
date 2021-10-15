@@ -30,32 +30,33 @@ PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize t
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
 DEBUG = False
     
-if DEBUG:
-    if N_PERMUTATIONS > 5: N_PERMUTATIONS = 5
-    N_JOBS = 1 
-    PARALLELIZE = False
-    
 # directories of all 3 timepoints
 tp_dirs = ['newlbls-bl-espad-fu3-19a-binge-n620/20210618-1632',
            'newlbls-fu2-espad-fu3-19a-binge-n634/20210618-1701', 
            'newlbls-fu3-espad-fu3-19a-binge-n650/20210618-1730'] #todo site# :: 'across_sites/lbls-bl-*'
 HOLDOUT_DIR = "/ritter/share/data/IMAGEN/h5files/newholdout-{}*{}*.h5" #todo site# newholdout:: h5files/holdout-
-SAVE_PATH = "results/holdout_all-tp_run.csv" #todo site# #holdout_results :: holdout_results_sites 
-
+SAVE_PATH = "results/holdout_all-tp-extra_run.csv" #todo site# #holdout_results :: holdout_results_sites 
+EXTRA_INFERENCE_DIR = "/ritter/share/data/IMAGEN/h5files/mediumextras-{}*{}*.h5"
+    
+if DEBUG:
+    if N_PERMUTATIONS > 5: N_PERMUTATIONS = 5
+    N_JOBS = 1 
+    PARALLELIZE = False
+    tp_dirs=[tp_dirs[0]]
 
 # Define a function for running training and test
 def run_model(X, y, X_test, y_test, estimator, fit_params={}, permute_X=False):
     if permute_X:
         X = MLpipeline._shuffle(X)
-        model["conf_corr_cb"].random_state = None
+        estimator["conf_corr_cb"].random_state = None
     # retrain on entire data
     estimator = estimator.fit(X, y, **fit_params)
     
-    # calculate balanced accuracy and AUC-ROC
+    # calculate balanced accuracy and AUC-ROC on test data
     test_score = make_scorer(balanced_accuracy_score)(estimator, X_test, y_test)        
     roc_auc = get_scorer("roc_auc")(estimator, X_test, y_test)  
     predicted_probs = np.around(estimator.predict_proba(X_test), decimals=4)
-    return test_score, roc_auc, predicted_probs
+    return estimator, test_score, roc_auc, predicted_probs
 
 
 if __name__ == "__main__": 
@@ -95,10 +96,14 @@ if __name__ == "__main__":
     runs["holdout_roc_auc"] = np.nan
     runs["holdout_ids"]= np.nan
     runs["holdout_lbls"]= np.nan
-    runs["holdout_preds"]= np.nan
+    runs["holdout_probs"]= np.nan
     runs["permuted_holdout_score"] = np.nan
     runs["permuted_holdout_roc_auc"] = np.nan
-    for c in ["holdout_ids", "holdout_lbls","holdout_preds", "permuted_holdout_score", "permuted_holdout_roc_auc"]:
+    runs["holdout_ids_extra"] = np.nan
+    runs["holdout_probs_extra"] = np.nan
+    for c in ["holdout_ids", "holdout_lbls","holdout_probs",
+              "permuted_holdout_score", "permuted_holdout_roc_auc",
+              "holdout_ids_extra", "holdout_probs_extra"]:
         runs[c] = runs[c].astype('object')
 
     print("========================================")
@@ -139,7 +144,6 @@ if __name__ == "__main__":
         runs.at[k, "holdout_ids"]   = test_data['i'][()].tolist()
         runs.at[k, "holdout_lbls"]  = y_test.tolist()
         
-        
         # prepare confound-correction params
         confs_grouped = np.array([])
         for c, v in confs.items():               
@@ -149,17 +153,33 @@ if __name__ == "__main__":
                 confs_grouped = 100*confs_grouped + v
 
         fit_params={"conf_corr_cb__groups": confs_grouped}
+        
         # run independent inference
-        test_score, roc_auc, preds = run_model(X, y, X_test, y_test, 
+        model, test_score, roc_auc, preds = run_model(X, y, X_test, y_test, 
                                         model, fit_params)
         
-        runs.at[k, "holdout_preds"]  = preds.tolist()
+        runs.at[k, "holdout_probs"]  = preds.tolist()
         runs.loc[k, "holdout_score"]   = test_score    
         runs.loc[k, "holdout_roc_auc"] = roc_auc  
 
         print("training accuracy: {:0.2f}% \t holdout accuracy: {:0.2f}% \t holdout AUC ROC: {:0.2f}%".format(
          make_scorer(balanced_accuracy_score)(model, X, y)*100, test_score*100, roc_auc*100))
+        
+        if EXTRA_INFERENCE_DIR:
+            print("running extra inference also on some (unlabeled) subjects at:\n", EXTRA_INFERENCE_DIR)
+        
+            extra_h5_path = sorted(glob(EXTRA_INFERENCE_DIR.format(tp, y_name_h5))) 
+            assert ((len(extra_h5_path)==1) or ("binge" in y_name_h5)), "for label {}, multiple test set files found: {}".format(slugify(y_name), extra_h5_path)
 
+            extra_h5_path = extra_h5_path[0]
+            extra_data = h5py.File(extra_h5_path, "r")
+    #         print("n(train_data) = {}\t n(test_data)={} \t n(features) = {}".format(len(X), len(X_test), X.shape[-1]))
+            runs.at[k, "holdout_ids_extra"]   = extra_data['i'][()].tolist()
+
+            X_extra = extra_data['X'][()]  
+            preds = np.around(model.predict_proba(X_extra), decimals=4)
+            runs.at[k, "holdout_probs_extra"]  = preds.tolist()
+    
         # permutation tests
         if N_PERMUTATIONS:
             with Parallel(n_jobs=N_JOBS) as parallel:
