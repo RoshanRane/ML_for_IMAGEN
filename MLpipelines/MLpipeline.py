@@ -24,7 +24,6 @@ class MLpipeline:
         """ Define parameters for the MLLearn object.
         Args:
             "h5file" (str): Full path to the HDF5 file.
-            "n_jobs" (int): Number of cores to use in parallel. 
             "conf_list" (list of str): the list of confound names to load from the hdf5.
             random_state (int): A random state to get reproducible results
         """        
@@ -37,6 +36,8 @@ class MLpipeline:
         self.X_test = None
         self.y_test = None
         self.confs_test = {} 
+        self.sub_ids = None
+        self.sub_ids_test = None
         
         # These are defined to calculate both BA and AUC later.
         self.func_acc = get_scorer('accuracy')
@@ -103,8 +104,7 @@ class MLpipeline:
                                                       test_size=test_size, 
                                                       stratify=stratify, 
                                                       shuffle=True, 
-                                                      random_state=self.random_state)
-            
+                                                      random_state=self.random_state)            
         test_mask = np.zeros(len(self.X), dtype=bool)
         test_mask[test_idx] = True
             
@@ -135,7 +135,17 @@ class MLpipeline:
 
             for c in self.confs:
                 self.confs[c] = func.transform(self.confs[c])
-                
+           
+    def print_data_size(self):
+        if self.X is None:
+            print("data is not loaded yet.. run MLpipeline.load_data()")
+        else:
+            print(f"Trainval data info:\t X ={self.X.shape} \t y ={self.y.shape} \t confs={self.confs.keys()}")
+        if self.X_test is None:
+            print("test data is not loaded yet.. run MLpipeline.load_data() and then MLpipeline.train_test_split()")
+        else:
+            print(f"    Test data info:\t X ={self.X_test.shape} \t y ={self.y_test.shape} \t n(trainval)={self.n_samples_tv}, n(test)={self.n_samples_test}")
+            
         
     def change_input_to_conf(self, c, onehot=True):
         """ Change the inputs of the model to a vector containing a confound.
@@ -170,7 +180,7 @@ class MLpipeline:
     @ignore_warnings(category=ConvergenceWarning)
     def run(self, pipe, grid, 
             n_splits=5, stratify_by_conf=None, conf_corr_params={}, 
-            run_pbcc=False, permute=0):
+            run_pbcc=False, permute=0, verbose=2):
         """ The main function to run the classification. 
 
         Args:
@@ -201,7 +211,7 @@ First split the data into train and test data"
         # grid search for hyperparameter tuning with the inner cv         
         gs = GridSearchCV(estimator=pipe, param_grid=grid, n_jobs=n_jobs,
                           cv=cv_splits, scoring=self.func_bal_acc,
-                          return_train_score=True, refit=True, verbose=2)
+                          return_train_score=True, refit=True, verbose=verbose)
         # fit the estimator on data
         gs = gs.fit(self.X, self.y, **conf_corr_params)
         
@@ -234,9 +244,6 @@ First split the data into train and test data"
         # if permutation is requested, then calculate the test statistic after permuting y  
         results_pt = {}        
         if permute:
-            # run parallel on all free CPUs except one
-            n_jobs = -2 if (self.parallelize) else 1
-            
             with Parallel(n_jobs=n_jobs) as parallel:
                 # run parallel jobs on all cores at once
                 pt_scores = parallel(delayed(

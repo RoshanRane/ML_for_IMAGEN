@@ -413,10 +413,6 @@ def create_h5s(lbl_combos, name, x_tp="FU3", data_subset_to_use='trainval', viz=
             d = Imagen()
             d.df = d.df_holdout
             d.df_out = pd.DataFrame(index=d.df_holdout.index)
-        elif data_subset_to_use=='holdout':  
-            d = Imagen()
-            d.df = d.df_holdout
-            d.df_out = pd.DataFrame(index=d.df_holdout.index)
         else:
             d = Imagen(exclude_holdout=True)         
 
@@ -440,7 +436,7 @@ def create_h5s(lbl_combos, name, x_tp="FU3", data_subset_to_use='trainval', viz=
             
 def print_h5list(fil):
     for f in sorted(glob(f"/ritter/share/data/IMAGEN/h5files/*{fil}*.h5")):
-        print(f" ('{f}', 'all'),")
+        print(f" '{f}',")
         
         
 ####################################################################################################################
@@ -521,3 +517,4 @@ def abline(ax, slope, intercept, color=None):
         
     ax.plot(x_vals, y_vals, color=color, alpha=0.1
             , scalex=False, scaley=False, linewidth=2)
+    
