@@ -1,14 +1,18 @@
 #################################################################################
+#!/usr/bin/env python
+# coding: utf-8
 """ IMAGEN Posthoc analysis Loader in all Session """
-# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 19th October 2021
+# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 4th November 2021
 #
 import os
 import h5py
+import shap
+import pickle
 import pandas as pd
 import numpy as np
-import warnings
 from glob import glob
-from itertools import chain, repeat
+from joblib import load
+import warnings
 warnings.filterwarnings('ignore')
 
 class INSTRUMENT_loader:
@@ -52,204 +56,16 @@ class INSTRUMENT_loader:
         -----
         If only one session has information,
         the same value is copied to all sessions based on ID.
-        (e.g. CTQ)
+        (e.g. CTQ[FU2], CTS[BL], PBQ[BL,FU1], BSI[FU3], PANAS[FU3])
         
         """
         # ----------------------------------------------------- #
-        # ROI Columns: Psychological profile                    #
+        # ROI Columns: Demographic profile                      #
         # ----------------------------------------------------- #        
-        if DATA == "NEO":
-            # Set the files with session and roi columns
-            NEO = [
-                ('FU3','IMAGEN-IMGN_NEO_FFI_FU3.csv'),
-                ('FU2','IMAGEN-IMGN_NEO_FFI_FU2-IMAGEN_SURVEY_DIGEST.csv'),
-                ('FU1','IMAGEN-IMGN_NEO_FFI_CHILD_FU_RC5-IMAGEN_SURVEY_DIGEST.csv'),
-                ('BL', 'IMAGEN-IMGN_NEO_FFI_CHILD_RC5-IMAGEN_SURVEY_DIGEST.csv')
-            ]
-            ROI = ['ID','Session','open_mean','cons_mean','extr_mean','agre_mean','neur_mean']
-            # Generate the instrument files in one dataframe
-            NEO_LIST = []
-            for SES, CSV in NEO:
-                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/{SES}/psytools/{CSV}"
-                DF = pd.read_csv(path, low_memory=False)
-                DF['ID'] = DF['User code'] if SES=='FU3' else DF['User code'].apply(lambda x : int(x[:12]))
-                DF['Session'] = SES
-                DF2 = DF[ROI]
-                NEO_LIST.append(DF2)
-            NEO = pd.concat(NEO_LIST)
-            # Rename the columns
-            DF3 = NEO.rename(
-                columns = {
-                    "neur_mean" : "Neuroticism mean",
-                    "extr_mean" : "Extroversion mean",
-                    "open_mean" : "Openness mean",
-                    "agre_mean" : "Agreeableness mean",
-                    "cons_mean" : "Conscientiousness mean",
-                }
-            )
-
-        if DATA == "SURPS":
-            # Set the files with session and roi columns
-            SURPS = [
-                ('FU3','IMAGEN-IMGN_SURPS_FU3.csv'),
-                ('FU2','IMAGEN-IMGN_SURPS_FU2-IMAGEN_SURVEY_DIGEST.csv'),
-                ('FU1','IMAGEN-IMGN_SURPS_FU_RC5-IMAGEN_SURVEY_DIGEST.csv'),
-                ('BL', 'IMAGEN-IMGN_SURPS_RC5-IMAGEN_SURVEY_DIGEST.csv')
-            ]
-            ROI = ['ID', 'Session', 'as_mean', 'h_mean', 'imp_mean', 'ss_mean']
-            # Generate the instrument files in one dataframe
-            SURPS_LIST = []
-            for SES, CSV in SURPS:
-                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/{SES}/psytools/{CSV}"
-                DF = pd.read_csv(path, low_memory=False)
-                DF['ID'] = DF['User code'] if SES=='FU3' else DF['User code'].apply(lambda x : int(x[:12]))
-                DF['Session'] = SES
-                DF2 = DF[ROI]
-                SURPS_LIST.append(DF2)
-            SURPS = pd.concat(SURPS_LIST)
-            # Rename the columns
-            DF3 = SURPS.rename(
-                columns = {
-                    "as_mean" : "Anxiety Sensitivity mean",
-                    "h_mean"  : "Hopelessness mean",
-                    "imp_mean": "Impulsivity mean",
-                    "ss_mean" : "Sensation seeking mean",
-                }
-            )
-
-        # ----------------------------------------------------- #
-        # ROI Columns: Socio-economic profile                   #
-        # ----------------------------------------------------- #
-        if DATA == "CTQ":
-            # Set the files with session and roi columns
-            CTQ = [
-                ('FU3','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
-                ('FU2','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
-                ('FU1','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
-                ('BL', 'IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv')
-            ]
-            ROI = ['ID','Session','ea_sum','pa_sum','sa_sum','en_sum','pn_sum','dn_sum']
-            # Set the columns for computation
-            emot_abu = ['CTQ_3','CTQ_8','CTQ_14','CTQ_18','CTQ_25']
-            phys_abu = ['CTQ_9','CTQ_11','CTQ_12','CTQ_15','CTQ_17']
-            sexual_abu = ['CTQ_20','CTQ_21','CTQ_23','CTQ_24','CTQ_27']
-            emot_neg = ['CTQ_5','CTQ_7','CTQ_13','CTQ_19','CTQ_28']
-            phys_neg = ['CTQ_1','CTQ_2','CTQ_4','CTQ_6','CTQ_26']
-            denial = ['CTQ_10','CTQ_16','CTQ_22']
-            # Generate the instrument files in one dataframe
-            CTQ_LIST = []
-            for SES, CSV in CTQ:
-                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/FU2/psytools/{CSV}"
-                DF = pd.read_csv(path, low_memory=False)
-                DF['ID'] = DF['User code'].apply(lambda x : int(x[:12]))
-                DF['Session'] = SES
-                DF['ea_sum'] = DF[emot_abu].sum(axis=1,skipna=False)
-                DF['pa_sum'] = DF[phys_abu].sum(axis=1,skipna=False)
-                DF['sa_sum'] = DF[sexual_abu].sum(axis=1,skipna=False)
-                DF['en_sum'] = DF[emot_neg].sum(axis=1,skipna=False)
-                DF['pn_sum'] = DF[phys_neg].sum(axis=1,skipna=False)
-                DF['dn_sum'] = DF[denial].sum(axis=1, skipna=False)
-                DF2 = DF[ROI]
-                CTQ_LIST.append(DF2)
-            CTQ = pd.concat(CTQ_LIST)
-            # Rename the columns
-            DF3 = CTQ.rename(
-                columns = {
-                    "ea_sum" : "Emotional abuse sum",
-                    "pa_sum" : "Physical abuse sum",
-                    "sa_sum" : "Sexual abuse sum",
-                    "en_sum" : "Emotional neglect sum",
-                    "pn_sum" : "Physical neglect sum",
-                    "dn_sum" : "Denial sum"
-                }
-            )
-
-        if DATA == "CTS":
-            # Set the files with session and roi columns
-            CTS = [
-                ('FU3','IMAGEN-IMGN_CTS_PARENT_RC5-BASIC_DIGEST.csv'),
-                ('FU2','IMAGEN-IMGN_CTS_PARENT_RC5-BASIC_DIGEST.csv'),
-                ('FU1','IMAGEN-IMGN_CTS_PARENT_RC5-BASIC_DIGEST.csv'),
-                ('BL', 'IMAGEN-IMGN_CTS_PARENT_RC5-BASIC_DIGEST.csv')
-            ]
-            ROI = [
-                'ID','Session','cts_assault','cts_injury','cts_negotiation',
-                'cts_psychological_aggression','cts_sexual_coercion'
-            ]
-            # Generate the instrument files in one dataframe
-            CTS_LIST = []
-            for SES, CSV in CTS:
-                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/BL/psytools/{CSV}"
-                DF = pd.read_csv(path, low_memory=False)
-                DF['ID'] = DF['User code'].apply(lambda x : int(x[:12]))
-                DF['Session'] = SES
-                DF2 = DF[ROI]
-                CTS_LIST.append(DF2)
-            CTS = pd.concat(CTS_LIST)
-            # Rename the columns
-            DF3 = CTS.rename(
-                columns = {
-                    "cts_assault"                  : "Assault mean",
-                    "cts_injury"                   : "Injury mean",
-                    "cts_negotiation"              : "Negotiation mean",
-                    "cts_psychological_aggression" : "Psychological Aggression mean",
-                    "cts_sexual_coercion"          : "Sexual Coercion mean"
-                }
-            )
-
-        if DATA == 'LEQ':
-            # Set the files with session and roi columns
-            LEQ = [
-                ('FU3','IMAGEN-IMGN_LEQ_FU3.csv'),
-                ('FU2','IMAGEN-IMGN_LEQ_FU2-IMAGEN_DIGEST.csv'),
-                ('FU1','IMAGEN-IMGN_LEQ_FU_RC5-IMAGEN_DIGEST.csv'),
-                ('BL' ,'IMAGEN-IMGN_LEQ_RC5-BASIC_DIGEST.csv')
-            ]
-            ROI = [
-                'ID','Session','family_valence','accident_valence','sexuality_valence',
-                'autonomy_valence','devience_valence','relocation_valence',
-                'distress_valence','noscale_valence','overall_valence',
-                'family_ever_meanfreq','accident_ever_meanfreq','sexuality_ever_meanfreq',
-                'autonomy_ever_meanfreq','devience_ever_meanfreq','relocation_ever_meanfreq',
-                'distress_ever_meanfreq','noscale_ever_meanfreq','overall_ever_meanfreq'
-            ]
-            # Generate the instrument files in one dataframe
-            LEQ_LIST = []
-            for SES, CSV in LEQ:
-                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/{SES}/psytools/{CSV}"
-                DF = pd.read_csv(path, low_memory=False)
-                DF['ID'] = DF['User code'] if SES=='FU3' else DF['User code'].apply(lambda x : int(x[:12]))
-                DF['Session'] = SES
-                DF2 = DF[ROI]
-                LEQ_LIST.append(DF2)
-            LEQ = pd.concat(LEQ_LIST)
-            # Rename the columns
-            DF3 = LEQ.rename(
-                columns = {
-                    # Mean valence of events
-                    "family_valence"           : "Family valence",
-                    "accident_valence"         : "Accident valence",
-                    "sexuality_valence"        : "Sexuality valence",
-                    "autonomy_valence"         : "Autonomy valence",
-                    "devience_valence"         : "Devience valence",
-                    "relocation_valence"       : "Relocation valence",
-                    "distress_valence"         : "Distress valence",
-                    "noscale_valence"          : "Noscale valence",
-                    "overall_valence"          : "Overall valence",
-                    # Mean frequency lifetime
-                    "family_ever_meanfreq"     : "Family mean frequency",
-                    "accident_ever_meanfreq"   : "Accident mean frequency",
-                    "sexuality_ever_meanfreq"  : "Sexuality mean frequency",
-                    "autonomy_ever_meanfreq"   : "Autonomy mean frequency",
-                    "devience_ever_meanfreq"   : "Devience mean frequency",
-                    "relocation_ever_meanfreq" : "Relocation mean frequency",
-                    "distress_ever_meanfreq"   : "Distress mean frequency",
-                    "noscale_ever_meanfreq"    : "Noscale mean frequency",
-                    "overall_ever_meanfreq"    : "Overall mean frequency",
-                }
-            )
-            
-        if DATA == 'PBQ':
+        if DATA == "BMI":
+            pass
+        
+        if DATA == "PBQ":
             # Set the files with session and roi columns
             PBQ = [
                 ('FU1','IMAGEN-IMGN_PBQ_FU_RC1-BASIC_DIGEST.csv'),
@@ -362,7 +178,8 @@ class INSTRUMENT_loader:
                 ('FU1','IMAGEN-IMGN_GEN_RC5-BASIC_DIGEST.csv'),
                 ('BL','IMAGEN-IMGN_GEN_RC5-BASIC_DIGEST.csv')
             ]
-            ROI = ['ID','Session','Paternal_disorder','Maternal_disorder']
+            ROI = ['ID','Session','Paternal_disorder','Maternal_disorder',
+                   'Pd_list','Md_list']
             # Generate the columns
             def disorder(x):
                 if x == 'ALC': return 'Alcohol problems'
@@ -395,11 +212,25 @@ class INSTRUMENT_loader:
                 DF['Disorder_PM_3'] = DF['Disorder_PM_3'].apply(disorder)
                 DF['Disorder_PM_4'] = DF['Disorder_PM_4'].apply(disorder)
                 DF['Disorder_PM_5'] = DF['Disorder_PM_5'].apply(disorder)
-                DF['Disorder_PM_6'] = DF['Disorder_PM_6'].apply(disorder)                
+                DF['Disorder_PM_6'] = DF['Disorder_PM_6'].apply(disorder)
+                P1 = DF['Disorder_PF_1'].values.tolist()
+                P2 = DF['Disorder_PF_2'].values.tolist()
+                P3 = DF['Disorder_PF_3'].values.tolist()
+                P4 = DF['Disorder_PF_4'].values.tolist()
+                M1 = DF['Disorder_PM_1'].values.tolist()
+                M2 = DF['Disorder_PM_1'].values.tolist()
+                M3 = DF['Disorder_PM_1'].values.tolist()
+                M4 = DF['Disorder_PM_1'].values.tolist()
+                M5 = DF['Disorder_PM_1'].values.tolist()
+                M6 = DF['Disorder_PM_1'].values.tolist()
+                Pd_raw = [list(i) for i in zip(P1,P2,P3,P4)]
+                Md_raw = [list(j) for j in zip(M1,M2,M3,M4,M5,M6)]
+                DF['Pd_list'] = [[x for x in i if pd.isnull(x) == False] for i in Pd_raw]
+                DF['Md_list'] = [[x for x in i if pd.isnull(x) == False] for i in Md_raw]
                 Variables = [
                     'ID','Session','Disorder_PF_1','Disorder_PF_2','Disorder_PF_3',
                     'Disorder_PF_4','Disorder_PM_1','Disorder_PM_2','Disorder_PM_3',
-                    'Disorder_PM_4','Disorder_PM_5','Disorder_PM_6'
+                    'Disorder_PM_4','Disorder_PM_5','Disorder_PM_6','Pd_list','Md_list'
                 ]
                 Check_DF = DF[Variables]
                 Check_DF['Paternal_disorder'] = Check_DF.loc[:, Check_DF.columns[2:6]].apply(
@@ -411,10 +242,448 @@ class INSTRUMENT_loader:
             GEN = pd.concat(GEN_LIST)
             DF3 = GEN
 
+        if DATA == 'LEQ':
+            # Set the files with session and roi columns
+            LEQ = [
+                ('FU3','IMAGEN-IMGN_LEQ_FU3.csv'),
+                ('FU2','IMAGEN-IMGN_LEQ_FU2-IMAGEN_DIGEST.csv'),
+                ('FU1','IMAGEN-IMGN_LEQ_FU_RC5-IMAGEN_DIGEST.csv'),
+                ('BL' ,'IMAGEN-IMGN_LEQ_RC5-BASIC_DIGEST.csv')
+            ]
+            ROI = [
+                'ID','Session','family_valence','accident_valence','sexuality_valence',
+                'autonomy_valence','devience_valence','relocation_valence',
+                'distress_valence','noscale_valence','overall_valence',
+                'family_ever_meanfreq','accident_ever_meanfreq','sexuality_ever_meanfreq',
+                'autonomy_ever_meanfreq','devience_ever_meanfreq','relocation_ever_meanfreq',
+                'distress_ever_meanfreq','noscale_ever_meanfreq','overall_ever_meanfreq'
+            ]
+            # Generate the instrument files in one dataframe
+            LEQ_LIST = []
+            for SES, CSV in LEQ:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/{SES}/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code'] if SES=='FU3' else DF['User code'].apply(lambda x : int(x[:12]))
+                DF['Session'] = SES
+                DF2 = DF[ROI]
+                LEQ_LIST.append(DF2)
+            LEQ = pd.concat(LEQ_LIST)
+            # Rename the columns
+            DF3 = LEQ.rename(
+                columns = {
+                    # Mean valence of events
+                    "family_valence"           : "Family valence",
+                    "accident_valence"         : "Accident valence",
+                    "sexuality_valence"        : "Sexuality valence",
+                    "autonomy_valence"         : "Autonomy valence",
+                    "devience_valence"         : "Devience valence",
+                    "relocation_valence"       : "Relocation valence",
+                    "distress_valence"         : "Distress valence",
+                    "noscale_valence"          : "Noscale valence",
+                    "overall_valence"          : "Overall valence",
+                    # Mean frequency lifetime
+                    "family_ever_meanfreq"     : "Family mean frequency",
+                    "accident_ever_meanfreq"   : "Accident mean frequency",
+                    "sexuality_ever_meanfreq"  : "Sexuality mean frequency",
+                    "autonomy_ever_meanfreq"   : "Autonomy mean frequency",
+                    "devience_ever_meanfreq"   : "Devience mean frequency",
+                    "relocation_ever_meanfreq" : "Relocation mean frequency",
+                    "distress_ever_meanfreq"   : "Distress mean frequency",
+                    "noscale_ever_meanfreq"    : "Noscale mean frequency",
+                    "overall_ever_meanfreq"    : "Overall mean frequency",
+                }
+            )
+            
+        if DATA == "DAWBA":
+            pass
+        
+        if DATA == "CANTAB":
+            pass
+        
         # ----------------------------------------------------- #
-        # ROI Columns: Other co-morbidities                     #
+        # ROI Columns: Psychological profile                    #
+        # ----------------------------------------------------- #        
+        if DATA == "NEO":
+            # Set the files with session and roi columns
+            NEO = [
+                ('FU3','IMAGEN-IMGN_NEO_FFI_FU3.csv'),
+                ('FU2','IMAGEN-IMGN_NEO_FFI_FU2-IMAGEN_SURVEY_DIGEST.csv'),
+                ('FU1','IMAGEN-IMGN_NEO_FFI_CHILD_FU_RC5-IMAGEN_SURVEY_DIGEST.csv'),
+                ('BL', 'IMAGEN-IMGN_NEO_FFI_CHILD_RC5-IMAGEN_SURVEY_DIGEST.csv')
+            ]
+            ROI = ['ID','Session','open_mean','cons_mean','extr_mean','agre_mean','neur_mean']
+            # Generate the instrument files in one dataframe
+            NEO_LIST = []
+            for SES, CSV in NEO:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/{SES}/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code'] if SES=='FU3' else DF['User code'].apply(lambda x : int(x[:12]))
+                DF['Session'] = SES
+                DF2 = DF[ROI]
+                NEO_LIST.append(DF2)
+            NEO = pd.concat(NEO_LIST)
+            # Rename the columns
+            DF3 = NEO.rename(
+                columns = {
+                    "neur_mean" : "Neuroticism mean",
+                    "extr_mean" : "Extroversion mean",
+                    "open_mean" : "Openness mean",
+                    "agre_mean" : "Agreeableness mean",
+                    "cons_mean" : "Conscientiousness mean",
+                }
+            )
+
+        if DATA == "SURPS":
+            # Set the files with session and roi columns
+            SURPS = [
+                ('FU3','IMAGEN-IMGN_SURPS_FU3.csv'),
+                ('FU2','IMAGEN-IMGN_SURPS_FU2-IMAGEN_SURVEY_DIGEST.csv'),
+                ('FU1','IMAGEN-IMGN_SURPS_FU_RC5-IMAGEN_SURVEY_DIGEST.csv'),
+                ('BL', 'IMAGEN-IMGN_SURPS_RC5-IMAGEN_SURVEY_DIGEST.csv')
+            ]
+            ROI = ['ID', 'Session', 'as_mean', 'h_mean', 'imp_mean', 'ss_mean']
+            # Generate the instrument files in one dataframe
+            SURPS_LIST = []
+            for SES, CSV in SURPS:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/{SES}/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code'] if SES=='FU3' else DF['User code'].apply(lambda x : int(x[:12]))
+                DF['Session'] = SES
+                DF2 = DF[ROI]
+                SURPS_LIST.append(DF2)
+            SURPS = pd.concat(SURPS_LIST)
+            # Rename the columns
+            DF3 = SURPS.rename(
+                columns = {
+                    "as_mean" : "Anxiety Sensitivity mean",
+                    "h_mean"  : "Hopelessness mean",
+                    "imp_mean": "Impulsivity mean",
+                    "ss_mean" : "Sensation seeking mean",
+                }
+            )
+            
+        if DATA == "TCI":
+            # Set the files with session and roi columns
+            TCI = [
+                ('FU3','IMAGEN-IMGN_TCI_FU3.csv'),
+                ('FU2','IMAGEN-IMGN_TCI_CHILD_FU2-IMAGEN_DIGEST.csv'),
+                ('FU1','IMAGEN-IMGN_TCI_CHILD_FU_RC5-IMAGEN_DIGEST.csv'),
+                ('BL','IMAGEN-IMGN_TCI_CHILD_RC5-IMAGEN_DIGEST.csv')
+            ]
+            ROI = ['ID','Session','tci_excit','tci_imp','tci_extra','tci_diso','tci_novseek']
+            # Generate the instrument files in one dataframe
+            TCI_LIST = []
+            for SES, CSV in TCI:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/{SES}/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code'] if SES=='FU3' else DF['User code'].apply(lambda x : int(x[:12]))
+                DF['Session'] = SES
+                DF2 = DF[ROI]
+                TCI_LIST.append(DF2)
+            TCI = pd.concat(TCI_LIST)
+            # Rename the columns
+            DF3 = TCI.rename(
+                columns = {
+                    "tci_excit" : "Exploratory excitability vs. Stoic rigidity",
+                    "tci_imp"  : "Impulsiveness vs. Reflection",
+                    "tci_extra": "Extravagance vs. Reserve",
+                    "tci_diso" : "Disorderliness vs. Regimentation",
+                    "tci_novseek" : "Total Novelty Seeking score"
+                }
+            )
+            
+        if DATA == 'BSI':
+            # Set the files with session and roi columns
+            BSI = [
+                ('FU3','IMAGEN-IMGN_BSI_FU3.csv'),
+                ('FU2','IMAGEN-IMGN_BSI_FU3.csv'),
+                ('FU1','IMAGEN-IMGN_BSI_FU3.csv'),
+                ('BL','IMAGEN-IMGN_BSI_FU3.csv')
+            ]
+            ROI = ['ID','Session','Somatization mean','Obsession-Compulsion mean','Interpersonal Sensitivity mean',
+                   'Depression mean','Anxiety mean','Hostility mean','Phobic Anxiety mean','Paranoid Ideation mean',
+                   'Psychoticism mean','Positive Symptom Distress Index','Global Severity Index']
+            # Generate the columns
+            ## Somatization
+            Somatization = ['BSI_02','BSI_07','BSI_23','BSI_29','BSI_30','BSI_33','BSI_37']
+            ## Obsession-Compulsion
+            Obsession_compulsion = ['BSI_05','BSI_15','BSI_26','BSI_27','BSI_32','BSI_36']
+            ## Interpersonal Sensitivity
+            Interpersonal_sensitivity = ['BSI_20','BSI_21','BSI_22','BSI_42']
+            ## Depression
+            Depression = ['BSI_09','BSI_16','BSI_17','BSI_18','BSI_35','BSI_50']
+            ## Anxiety
+            Anxiety = ['BSI_01','BSI_12','BSI_19','BSI_38','BSI_45','BSI_49']
+            ## Hostility
+            Hostility = ['BSI_06','BSI_13','BSI_40','BSI_41','BSI_46']
+            ## Phobic Anxiety
+            Phobic_anxiety = ['BSI_08','BSI_28','BSI_31','BSI_43','BSI_47']
+            ## Paranoid Ideation
+            Paranoid_ideation = ['BSI_04','BSI_10','BSI_24','BSI_48','BSI_51']
+            ## Psychoticism
+            Psychoticism = ['BSI_03','BSI_14','BSI_34','BSI_44','BSI_53']
+            BSI_labels = ['ID','Session']+Somatization+Obsession_compulsion+\
+                         Interpersonal_sensitivity+Depression+Anxiety+\
+                         Hostility+Phobic_anxiety+Paranoid_ideation+Psychoticism
+            
+            # Generate the instrument files in one dataframe
+            BSI_LIST = []
+            for SES, CSV in BSI:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/FU3/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code']
+                DF['Session'] = SES
+                # Rename the values
+                DF2 = DF[BSI_labels].replace(
+                    {'0': 0, '1': 1, '2': 2,'3': 3, '4': 4, '5': 5,'6': 6,'R':np.NaN}
+                )
+                DF2 = DF2.dropna()
+                DF2['Somatization mean'] = DF2[Somatization].mean(axis=1,skipna=False)
+                DF2['Obsession-Compulsion mean'] = DF2[Obsession_compulsion].mean(axis=1,skipna=False)
+                DF2['Interpersonal Sensitivity mean'] = DF2[Interpersonal_sensitivity].mean(axis=1,skipna=False)
+                DF2['Depression mean'] = DF2[Depression].mean(axis=1,skipna=False)
+                DF2['Anxiety mean'] = DF2[Anxiety].mean(axis=1,skipna=False)
+                DF2['Hostility mean'] = DF2[Hostility].mean(axis=1,skipna=False)
+                DF2['Phobic Anxiety mean'] = DF2[Phobic_anxiety].mean(axis=1,skipna=False)
+                DF2['Paranoid Ideation mean'] = DF2[Paranoid_ideation].mean(axis=1,skipna=False)
+                DF2['Psychoticism mean'] = DF2[Psychoticism].mean(axis=1,skipna=False)
+                DF2['Positive Symptom Distress Index'] = DF2[BSI_labels[2:]].sum(axis=1,skipna=False)
+                DF2['Global Severity Index'] = DF2[BSI_labels[2:]].mean(axis=1,skipna=False)
+                DF2 = DF2[ROI]
+                BSI_LIST.append(DF2)
+            BSI = pd.concat(BSI_LIST)
+            DF3 = BSI
+        
+        if DATA == "KIRBY":
+            # Set the files with session and roi columns
+            pass
+        
+        if DATA == "BIS":
+            pass
+        
+        if DATA == "CSI":
+            pass
+        
+        if DATA == "PHQ":
+            pass
+        
+        if DATA == "CES":
+            pass
+        
+        if DATA == "ANXDX":
+            pass
+        
+        if DATA == "CAPE":
+            pass
+        
+        if DATA == "SDQ":
+            pass
+        
+        if DATA == "IRI":
+            pass
+        
+        if DATA == "RRS":
+            pass
+        
+        if DATA == "PALP":
+            pass
+        
         # ----------------------------------------------------- #
-        if DATA == 'FTND':
+        # ROI Columns: Sociial profile                          #
+        # ----------------------------------------------------- #
+#         if DATA == "CTQ":
+#             # Set the files with session and roi columns
+#             CTQ = [
+#                 ('FU3','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
+#                 ('FU2','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
+#                 ('FU1','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
+#                 ('BL', 'IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv')
+#             ]
+#             ROI = ['ID','Session','ea_sum','pa_sum','sa_sum','en_sum','pn_sum','dn_sum']
+#             # Set the columns for computation
+#             emot_abu = ['CTQ_3','CTQ_8','CTQ_14','CTQ_18','CTQ_25']
+#             phys_abu = ['CTQ_9','CTQ_11','CTQ_12','CTQ_15','CTQ_17']
+#             sexual_abu = ['CTQ_20','CTQ_21','CTQ_23','CTQ_24','CTQ_27']
+#             emot_neg = ['CTQ_5','CTQ_7','CTQ_13','CTQ_19','CTQ_28']
+#             phys_neg = ['CTQ_1','CTQ_2','CTQ_4','CTQ_6','CTQ_26']
+#             denial = ['CTQ_10','CTQ_16','CTQ_22']
+#             # Generate the instrument files in one dataframe
+#             CTQ_LIST = []
+#             for SES, CSV in CTQ:
+#                 path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/FU2/psytools/{CSV}"
+#                 DF = pd.read_csv(path, low_memory=False)
+#                 DF['ID'] = DF['User code'].apply(lambda x : int(x[:12]))
+#                 DF['Session'] = SES
+#                 DF['ea_sum'] = DF[emot_abu].sum(axis=1,skipna=False)
+#                 DF['pa_sum'] = DF[phys_abu].sum(axis=1,skipna=False)
+#                 DF['sa_sum'] = DF[sexual_abu].sum(axis=1,skipna=False)
+#                 DF['en_sum'] = DF[emot_neg].sum(axis=1,skipna=False)
+#                 DF['pn_sum'] = DF[phys_neg].sum(axis=1,skipna=False)
+#                 DF['dn_sum'] = DF[denial].sum(axis=1, skipna=False)
+#                 DF2 = DF[ROI]
+#                 CTQ_LIST.append(DF2)
+#             CTQ = pd.concat(CTQ_LIST)
+#             # Rename the columns
+#             DF3 = CTQ.rename(
+#                 columns = {
+#                     "ea_sum" : "Emotional abuse sum",
+#                     "pa_sum" : "Physical abuse sum",
+#                     "sa_sum" : "Sexual abuse sum",
+#                     "en_sum" : "Emotional neglect sum",
+#                     "pn_sum" : "Physical neglect sum",
+#                     "dn_sum" : "Denial sum"
+#                 }
+#             )
+            
+        if DATA == "CTQ_MD":
+            # Set the files with session and roi columns
+            CTQ = [
+                ('FU3','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
+                ('FU2','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
+                ('FU1','IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv'),
+                ('BL', 'IMAGEN-IMGN_CTQ_CHILD_FU2-IMAGEN_DIGEST.csv')
+            ]
+            ROI = ['ID','Session','ea_sum','pa_sum','sa_sum','en_sum','pn_sum',
+                   'dn_sum','md1','md2','md3']
+            # Set the columns for computation
+            emot_abu = ['CTQ_3','CTQ_8','CTQ_14','CTQ_18','CTQ_25']
+            phys_abu = ['CTQ_9','CTQ_11','CTQ_12','CTQ_15','CTQ_17']
+            sexual_abu = ['CTQ_20','CTQ_21','CTQ_23','CTQ_24','CTQ_27']
+            emot_neg = ['CTQ_5','CTQ_7','CTQ_13','CTQ_19','CTQ_28']
+            phys_neg = ['CTQ_1','CTQ_2','CTQ_4','CTQ_6','CTQ_26']
+            denial = ['CTQ_10','CTQ_16','CTQ_22']
+            # Generate the instrument files in one dataframe
+            CTQ_LIST = []
+            for SES, CSV in CTQ:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/FU2/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code'].apply(lambda x : int(x[:12]))
+                DF['Session'] = SES
+                DF['ea_sum'] = DF[emot_abu].sum(axis=1,skipna=False)
+                DF['pa_sum'] = DF[phys_abu].sum(axis=1,skipna=False)
+                DF['sa_sum'] = DF[sexual_abu].sum(axis=1,skipna=False)
+                DF['en_sum'] = DF[emot_neg].sum(axis=1,skipna=False)
+                DF['pn_sum'] = DF[phys_neg].sum(axis=1,skipna=False)
+                DF['dn_sum'] = DF[denial].sum(axis=1, skipna=False)
+                DF['md1'] = DF['CTQ_10']
+                DF['md2'] = DF['CTQ_16']
+                DF['md3'] = DF['CTQ_22']
+                DF2 = DF[ROI]
+                CTQ_LIST.append(DF2)
+            CTQ = pd.concat(CTQ_LIST)
+            # Rename the columns
+            DF3 = CTQ.rename(
+                columns = {
+                    "ea_sum" : "Emotional abuse sum",
+                    "pa_sum" : "Physical abuse sum",
+                    "sa_sum" : "Sexual abuse sum",
+                    "en_sum" : "Emotional neglect sum",
+                    "pn_sum" : "Physical neglect sum",
+                    "dn_sum" : "Denial sum",
+                    "md1" : "MD 1",
+                    "md2" : "MD 2",
+                    "md3" : "MD 3"
+                }
+            )
+
+        if DATA == "CTS":
+            # Set the files with session and roi columns
+            CTS = [
+                ('FU3','IMAGEN-IMGN_CTS_PARENT_RC5-BASIC_DIGEST.csv'),
+                ('FU2','IMAGEN-IMGN_CTS_PARENT_RC5-BASIC_DIGEST.csv'),
+                ('FU1','IMAGEN-IMGN_CTS_PARENT_RC5-BASIC_DIGEST.csv'),
+                ('BL', 'IMAGEN-IMGN_CTS_PARENT_RC5-BASIC_DIGEST.csv')
+            ]
+            ROI = [
+                'ID','Session','cts_assault','cts_injury','cts_negotiation',
+                'cts_psychological_aggression','cts_sexual_coercion'
+            ]
+            # Generate the instrument files in one dataframe
+            CTS_LIST = []
+            for SES, CSV in CTS:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/BL/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code'].apply(lambda x : int(x[:12]))
+                DF['Session'] = SES
+                DF2 = DF[ROI]
+                CTS_LIST.append(DF2)
+            CTS = pd.concat(CTS_LIST)
+            # Rename the columns
+            DF3 = CTS.rename(
+                columns = {
+                    "cts_assault"                  : "Assault mean",
+                    "cts_injury"                   : "Injury mean",
+                    "cts_negotiation"              : "Negotiation mean",
+                    "cts_psychological_aggression" : "Psychological Aggression mean",
+                    "cts_sexual_coercion"          : "Sexual Coercion mean"
+                }
+            )
+            
+        if DATA == "PANAS":
+            # Set the files with session and roi columns
+            PANAS = [
+                ('FU3','IMAGEN-IMGN_PANAS_FU3.csv'),
+                ('FU2','IMAGEN-IMGN_PANAS_FU3.csv'),
+                ('FU1','IMAGEN-IMGN_PANAS_FU3.csv'),
+                ('BL','IMAGEN-IMGN_PANAS_FU3.csv')
+            ]
+            ROI = ['ID','Session','Positive Affect Score','Negative Affect Score']
+            # Set the columns for computation
+            panas_pas = ['PANAS_01','PANAS_03','PANAS_05','PANAS_09','PANAS_10',
+                         'PANAS_12','PANAS_14','PANAS_16','PANAS_17','PANAS_19']
+            panas_nas = ['PANAS_02','PANAS_04','PANAS_06','PANAS_07','PANAS_08',
+                         'PANAS_11','PANAS_13','PANAS_15','PANAS_18','PANAS_20']
+            # Generate the instrument files in one dataframe
+            PANAS_LIST=[]
+            for SES, CSV in PANAS:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/FU3/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code']
+                DF['Session'] = SES
+                DF['Positive Affect Score'] = DF[panas_pas].sum(axis=1,skipna=False)
+                DF['Negative Affect Score'] = DF[panas_nas].sum(axis=1,skipna=False)
+                DF2 = DF[ROI]
+                PANAS_LIST.append(DF2)
+            PANAS = pd.concat(PANAS_LIST)
+            DF3 = PANAS
+        
+        if DATA == "MINI5":
+            pass
+
+        # ----------------------------------------------------- #
+        # ROI Columns: Substance use profile                    #
+        # ----------------------------------------------------- #
+        if DATA == "MAST":
+            # Set the files with session and roi columns
+            MAST = [
+                ('FU3','IMAGEN-IMGN_MAST_FU3.csv'),
+                ('FU2','IMAGEN-IMGN_MAST_CHILD_FU2-IMAGEN_DIGEST.csv'),
+                ('FU1','IMAGEN-IMGN_MAST_PARENT_FU_RC5-BASIC_DIGEST.csv'),
+                ('BL','IMAGEN-IMGN_MAST_PARENT_RC5-BASIC_DIGEST.csv')
+            ]
+            ROI = ['ID','Session','MAST flag','MAST total','MAST Alcohol dependency symptoms','MAST sum']
+            # Generate the columns
+            def flag(x):
+                if (x > 4): return 'positive alchololism screening'
+                else: return 'negative alchololism screening'
+            # Generate the instrument files in one dataframe
+            MAST_LIST = []
+            for SES, CSV in MAST:
+                path = f"{self.DATA_DIR}/IMAGEN_RAW/2.7/{SES}/psytools/{CSV}"
+                DF = pd.read_csv(path, low_memory=False)
+                DF['ID'] = DF['User code'] if SES=='FU3' else DF['User code'].apply(lambda x : int(x[:12]))
+                DF['Session'] = SES
+                # Renmae the values
+                DF['MAST total'] = DF['mast_total']
+                DF['MAST Alcohol dependency symptoms'] = DF['mast_dsm']
+                DF['MAST sum'] = DF['mast_sum']
+                DF['MAST flag'] = DF['mast_sum'].apply(flag)
+                DF2 = DF[ROI]
+                MAST_LIST.append(DF2)
+            MAST = pd.concat(MAST_LIST)
+            DF3 = MAST
+
+        if DATA == "FTND":
             # Set the files with session and roi columns
             FTND = [
                 ('FU3','IMAGEN-IMGN_ESPAD_FU3.csv'),
@@ -422,7 +691,7 @@ class INSTRUMENT_loader:
                 ('FU1','IMAGEN-IMGN_ESPAD_CHILD_FU_RC5-IMAGEN_DIGEST.csv'),
                 ('BL','IMAGEN-IMGN_ESPAD_CHILD_RC5-IMAGEN_DIGEST.csv')
             ]
-            ROI = ['ID','Session','Likelihood of nicotine dependence child']
+            ROI = ['ID','Session','Likelihood of nicotine dependence child','FTND Sum']
             # Generate the columns
             def test(x):
                 if (7<=x and x <=10): return 'highly dependent'
@@ -438,14 +707,17 @@ class INSTRUMENT_loader:
                 DF['Session'] = SES
                 # Rename the values
                 DF['Likelihood of nicotine dependence child'] = DF['ftnd_sum'].apply(test)
+                DF['FTND Sum'] = DF['ftnd_sum']
                 DF2 = DF[ROI]
                 FTND_LIST.append(DF2)
             FTND = pd.concat(FTND_LIST)
             DF3 = FTND
 
-        if DATA == 'DAST':
+        if DATA == "DAST":
             # Set the files with session and roi columns
-            
+            DAST = [
+                
+            ]
             # Generate the columns
             
             # Generate the instrument files in one dataframe
@@ -457,7 +729,7 @@ class INSTRUMENT_loader:
 #                 self.VARIABLES, self.NEW_DF2 = DAST_SESSION(self.SESSION)
             pass
 
-        if DATA == 'SCID':
+        if DATA == "SCID":
             # Set the files with session and roi columns
             
             # Generate the columns
@@ -472,7 +744,7 @@ class INSTRUMENT_loader:
 #                 self.VARIABLES, self.NEW_DF2 = SCID_SESSION(self.SESSION)
             pass
 
-        if DATA == 'DMQ':
+        if DATA == "DMQ":
             # Set the files with session and roi columns
             
             # Generate the columns
@@ -486,47 +758,16 @@ class INSTRUMENT_loader:
 #                 self.VARIABLES, self.NEW_DF2 = DMQ_SESSION(self.SESSION)
             pass
 
-        if DATA == 'BSI':
-            # Set the files with session and roi columns
-            
-            # Generate the columns
-            
-            # Generate the instrument files in one dataframe
-#             if SESSION == 'FU3':
-#                 ## Somatization
-#                 Somatization_labels = ['BSI_02', 'BSI_07', 'BSI_23',
-#                                        'BSI_29', 'BSI_30', 'BSI_33', 'BSI_37']
-#                 ## Obsession-Compulsion
-#                 Obsession_compulsion_labels = ['BSI_05', 'BSI_15', 'BSI_26',
-#                                                'BSI_27', 'BSI_32', 'BSI_36']
-#                 ## Interpersonal Sensitivity
-#                 Interpersonal_sensitivity_labels = ['BSI_20', 'BSI_21',
-#                                                     'BSI_22', 'BSI_42']
-#                 ## Depression
-#                 Depression_labels = ['BSI_09', 'BSI_16', 'BSI_17',
-#                                      'BSI_18', 'BSI_35', 'BSI_50']
-#                 ## Anxiety
-#                 Anxiety_labels = ['BSI_01', 'BSI_12', 'BSI_19',
-#                                   'BSI_38', 'BSI_45', 'BSI_49']
-#                 ## Hostility
-#                 Hostility_labels = ['BSI_06', 'BSI_13', 'BSI_40',
-#                                     'BSI_41', 'BSI_46']
-#                 ## Phobic Anxiety
-#                 Phobic_anxiety_labels = ['BSI_08', 'BSI_28', 'BSI_31',
-#                                          'BSI_43', 'BSI_47']
-#                 ## Paranoid Ideation
-#                 Paranoid_ideation_labels = ['BSI_04', 'BSI_10', 'BSI_24',
-#                                             'BSI_48', 'BSI_51']
-#                 ## Psychoticism
-#                 Psychoticism_labels = ['BSI_03', 'BSI_14', 'BSI_34',
-#                                        'BSI_44', 'BSI_53']
-#                 DF_BSI['somatization_mean'] = DF_CTQ[Somatization_labels].mean(axis=1,
-#                                                                                skipna=False)
-#                 DF_BSI['obsession_compulsion_mean'] = DF_CTQ[Somatization_labels].mean(axis=1,
-#                                                                                skipna=False)
+        if DATA == "BULLY":
             pass
 
-        if DATA == 'AUDIT':
+        if DATA == "ESPAD":
+            pass
+        
+        if DATA == "TLFB":
+            pass
+
+        if DATA == "AUDIT":
             # Set the files with session and roi columns
             
             # Generate the columns
@@ -538,20 +779,6 @@ class INSTRUMENT_loader:
 #                 return Variables, DATA_DF
 #         elif 'AUDIT' == self.DATA: # 'AUDIT'
 #             self.VARIABLES, self.NEW_DF2 = AUDIT_SESSION(self.SESSION)
-            pass
-
-        if DATA == 'MAST':
-            # Set the files with session and roi columns
-            
-            # Generate the columns
-            
-            # Generate the instrument files in one dataframe
-#             if SESSION == 'FU3':
-#                 Variables = ['sex', 'site', 'class']
-#                 DATA_DF = self.NEW_DF[Variables]
-#                 return Variables, DATA_DF
-#         elif 'MAST' == self.DATA: # 'MAST'
-#             self.VARIABLES, self.NEW_DF2 = MAST_SESSION(self.SESSION)  
             pass
 
         if save == True:
@@ -578,9 +805,10 @@ class INSTRUMENT_loader:
         Notes
         -----
         This function select the ROI:
+        Demographic profile - LEQ, PBQ, GEN, BMI, 
         Psychological profile - NEO, SURPS,
-        Socio-economic profile - CTQ, CTS, LEQ, PBQ, GEN,
-        Other co-morbidities - FTND, DAST, SCID, DMQ, BSI, AUDIT, MAST
+        Social profile - CTQ, CTS, 
+        Substance use profile - FTND, DAST, SCID, DMQ, BSI, AUDIT, MAST
 
         Examples
         --------
@@ -652,12 +880,12 @@ class HDF5_loader:
         if DATA == "Binge":
             # Set the files with session and roi columns
             BINGE = [
-                ('FU3','Training','newlbls-fu3-espad-fu3-19a-binge-n650.h5'),
-                ('FU3','Holdout', 'newholdout-fu3-espad-fu3-19a-binge-n102.h5'),
-                ('FU2','Training','newlbls-fu2-espad-fu3-19a-binge-n634.h5'),
-                ('FU2','Holdout', 'newholdout-fu2-espad-fu3-19a-binge-n102.h5'),
-                ('BL', 'Training','newlbls-bl-espad-fu3-19a-binge-n620.h5'),
-                ('BL', 'Holdout', 'newholdout-bl-espad-fu3-19a-binge-n102.h5')
+                ('FU3','Training','newlbls-clean-fu3-espad-fu3-19a-binge-n650.h5'),
+                ('FU3','Holdout', 'newholdout-clean-fu3-espad-fu3-19a-binge-n102.h5'),
+                ('FU2','Training','newlbls-clean-fu2-espad-fu3-19a-binge-n634.h5'),
+                ('FU2','Holdout', 'newholdout-clean-fu2-espad-fu3-19a-binge-n102.h5'),
+                ('BL', 'Training','newlbls-clean-bl-espad-fu3-19a-binge-n620.h5'),
+                ('BL', 'Holdout', 'newholdout-clean-bl-espad-fu3-19a-binge-n102.h5')
             ]
             ROI = ['ID','Session','y','Dataset','Sex','Site','Class']
             # Generate the instrument files in one dataframe
@@ -734,6 +962,100 @@ class HDF5_loader:
         hdf5_path = f"{self.DATA_DIR}/posthoc/{hdf5_file}"
         DF = pd.read_csv(hdf5_path, low_memory=False)
         return DF
+
+    def get_train_data(self, H5_DIR, group=False):
+        """ Load the train data
+        
+        Parameters
+        ----------
+        H5_DIR : string
+            Directory saved File path
+        group : boolean
+            If True then generate the gorup_mask
+            
+        Returns
+        -------
+        self.tr_X : numpy.ndarray
+            Data, hdf5 file
+        self.tr_X_col_names : numpy.ndarray
+            X features name list
+        self.tr_Other : list
+            at least contain y, ID, numpy.ndarray or other Group mask
+            
+        Examples
+        --------
+        >>> from imagen_posthocloader import *
+        >>> DATA = HDF5_loader()
+        >>> tr_X, tr_X_col_names, tr_Other = DATA.get_train_data(
+        ...     'H5_DIR')                                  # DATA
+        
+        """
+        data = h5py.File(self.DATA_DIR+"/h5files/"+H5_DIR, 'r')
+        print(data.keys(), data.attrs.keys())
+        X = data['X'][()]
+        X_col = data.attrs['X_col_names']
+        X_col_names = np.array([i.replace(")","") for i in X_col])
+        self.tr_X = X
+        self.tr_X_col_names = X_col_names
+        
+        y = data[data.attrs['labels'][0]][()]
+        ID = data['i'][()]
+        
+        if group == True:
+            sex_mask = data['sex'].astype(bool)[()]
+            class_mask = data['Binge'][()].astype(bool)
+            self.tr_Other = [y, ID, sex_mask, class_mask]
+        else:
+            self.tr_Other = [y, ID]
+        X.shape, len(X_col_names)
+        return self.tr_X, self.tr_X_col_names, self.tr_Other
+
+    def get_holdout_data(self, H5_DIR, group=False):
+        """ Load the holdout data
+        
+        Parameters
+        ----------
+        H5_DIR : string
+            Directory saved File path
+        group : boolean
+            If True then generate the gorup_mask
+            
+        Returns
+        -------
+        self.ho_X : numpy.ndarray
+            Data, hdf5 file
+        self.ho_X_col_names : numpy.ndarray
+            X features name list
+        self.ho_Other : list
+            at least contain y, ID, numpy.ndarray or other Group mask
+            
+        Examples
+        --------
+        >>> from imagen_posthocloader import *
+        >>> DATA = HDF5_loader()
+        >>> ho_X, ho_X_col_names, ho_Other = DATA.get_train_data(
+        ...     'H5_DIR')                                  # DATA
+        
+        """
+        data = h5py.File(self.DATA_DIR+"/h5files/"+H5_DIR, 'r')
+#         print(data.keys(), data.attrs.keys())
+        X = data['X'][()]
+        X_col = data.attrs['X_col_names']
+        X_col_names = np.array([i.replace(")","") for i in X_col])
+        self.ho_X = X
+        self.ho_X_col_names = X_col_names
+        
+        y = data[data.attrs['labels'][0]][()]
+        ID = data['i'][()]
+        
+        if group == True:
+            sex_mask = data['sex'][()]
+            class_mask = data['Binge'][()]
+            self.ho_Other = [y, ID, sex_mask, class_mask]
+        else:
+            self.ho_Other = [y, ID]
+        X.shape, len(X_col_names)
+        return self.ho_X, self.ho_X_col_names, self.ho_Other
     
 #     def __str__(self):
 #         pass
@@ -785,7 +1107,7 @@ class RUN_loader:
             test_probs = [probs[1] for probs in eval(df['test_probs'].values[i])]
             holdout_ids = eval(df['holdout_ids'].values[i])
             holdout_lbls = eval(df['holdout_lbls'].values[i])
-            holdout_preds = [probs[1] for probs in eval(df['holdout_preds'].values[i])]
+            holdout_preds = [probs[1] for probs in eval(df['holdout_probs'].values[i])]
             # generate the dataframe
             DF_TEST = pd.DataFrame({
                 # Model configuration
@@ -946,7 +1268,202 @@ class RUN_loader:
 #     def __str__(self):
 #         pass
 
-class IMAGEN_posthoc(INSTRUMENT_loader, HDF5_loader, RUN_loader):
+class SHAP_loader:
+    def __init__(self, DATA_DIR="/ritter/share/data/IMAGEN"):
+        """ Set up path
+        
+        Parameters
+        ----------
+        DATA_DIR : string, optional
+            Directory IMAGEN absolute path
+        
+        """
+        # Set the directory path: IMAGEN
+        self.DATA_DIR = DATA_DIR   
+        
+    def get_model(self, MODEL_DIR):
+        """ Load the model
+        
+        Parameters
+        ----------
+        MODEL_DIR : string
+            Directory saved Model path
+        
+        Returns
+        -------
+        self.MODELS : dictionary
+            model configuration
+        
+        Examples
+        --------
+        >>> from imagen_posthocloader import *
+        >>> MODEL = SHAP_loader()
+        >>> DICT = MODEL.get_model(
+        ...     'MODEL_DIR')                  # MODELS
+        
+        Notes
+        -----
+        All the models weighted files are contained in same folder.
+        
+        """
+        
+        models_dir = sorted(glob(MODEL_DIR))[-1]
+        models = {}
+        model_names = list(set([f.split("_")[0] for f in os.listdir(models_dir) if f.split(".")[-1]=="model"]))
+        for model_name in model_names:
+            models.update({model_name: [load(f) for f in glob(models_dir+f"/{model_name}_cb_*.model")]})
+        self.MODELS = models
+        self.MODEL_NAME = model_names
+        return self.MODELS
+    
+    def get_list(self, MODELS, X):
+        """ Generate the SHAP input value list
+        
+        Parameters
+        ----------
+        MODELS : dictionary
+            model configuration
+        X : numpy.ndarray
+            Data, hdf5 file
+        
+        Returns
+        -------
+        self.INPUT : list
+            SHAP input combination list
+        
+        Examples
+        --------
+        >>> from imagen_posthocloader import *
+        >>> DATA = SHAP_loader()
+        >>> INPUT = DATA.get_list(
+        ...     'MODELS',                 # MODELS
+        ...     'X')                      # X
+        
+        Notes
+        -----
+        Expected output below:
+        INPUT = [
+            [['SVM-RBF'], X, 0],
+            [['SVM-RBF'], X, 1],
+            [['SVM-RBF'], X, 2],
+            [['SVM-RBF'], X, 3],
+            ...
+            [['GB'],      X, 5],
+            [['GB'],      X, 6]
+        ]
+        
+        """
+        INPUT = []
+        for model_name in MODELS:
+            for i, model in enumerate(MODELS[model_name]):
+                LIST = [model_name.upper(), X, i]
+                INPUT.append(LIST)
+        self.INPUT = INPUT
+        return self.INPUT
+    
+    def get_SHAP(self, INPUT, save = True):
+        """ Generate the SHAP value
+        
+        Parameters
+        ----------
+        INPUT: list
+            SHAP INPUT: Model name, X, and N - trial number
+        save : boolean
+            Defualt save the shap_value
+        
+        Examples
+        --------
+        >>> from imagen_posthocloader import *
+        >>> DATA = SHAP_loader()
+        >>> _ = DATA.to_SHAP(
+        ...     'INPUT',                   # INPUT
+        ...     save=True)                 # save        
+        
+        Notes
+        -----
+        explainers generate the SHAP value
+        
+        """
+        MODEL = INPUT[0]
+        X = INPUT[1]
+        N = INPUT[2]
+        # 100 instances for use as the background distribution
+        X100 = shap.utils.sample(X, 100) 
+        for model_name in self.MODELS:
+            if (model_name.upper() not in MODEL):
+#                 print(f"skipping model {model_name}")
+                continue
+#             print(f"generating SHAP values for model = {model_name} ..")
+            for i, model in enumerate(self.MODELS[model_name]):
+                if i!=N:
+#                     print(f"Skipping model '{model_name}': {i}' as it is taking too long")
+                    continue
+                if i==N:
+#                     print(f"generating SHAP values for model = {model_name}:{i} ..")
+                    explainer = shap.Explainer(model.predict, X100, output_names=["Healthy","AUD-risk"])
+                    shap_values = explainer(X)
+                if save == True:
+                    if not os.path.isdir("explainers"):
+                        os.makedirs("explainers")
+                    with open(f"explainers/{model_name+str(i)}_multi.sav", "wb") as f:
+                        pickle.dump(shap_values, f)
+    
+    def load_SHAP(self, SHAP):
+        """ Generate the mean|SHAP| value
+        
+        Parameters
+        ----------
+        SHAP : .sav file
+            Load the SHAP value
+        
+        Examples
+        --------
+        >>> from imagen_posthocloader import *
+        >>> DATA = SHAP_loader()
+        >>> mean_SHAP = DATA.load_SHAP(
+        ...     'SHAP')                     # SHAP
+        
+        """
+        with open(self.DATA_DIR+"/posthoc/explainers/"+SHAP, 'rb') as fp:
+            load_shap_values = pickle.load(fp)
+        SHAP_list = []
+        for data in load_shap_values:
+            value = [data[i].values for i in range(data.shape[0])]
+            SHAP_list.append(value)
+        DF_SHAP = pd.DataFrame(SHAP_list)
+        mean_SHAP = list(DF_SHAP.apply(abs).mean())
+        std_SHAP = list(DF_SHAP.std())
+        return mean_SHAP, std_SHAP
+    
+    def read_SHAP(self, SHAP_file):
+        """ Load the SHAP file
+        
+        Parameters
+        ----------
+        SHAP_file : string
+            SHAP file
+            
+        Returns
+        -------
+        self.SHAP : pandas.dataframe
+            The SHAP file (*.csv)
+        
+        Example
+        -------
+        >>> from imagen_posthocloader import *
+        >>> DATA = SHAP_loader()
+        >>> DF = DATA.read_SHAP(
+        ...      SHAP_file)               # SHAP file
+        
+        """
+        SHAP_path = self.DATA_DIR+"/posthoc/"+SHAP_file
+        if not os.path.isdir(os.path.dirname(SHAP_path)):
+            os.makedirs(os.path.dirname(SHAP_path))
+        DF = pd.read_csv(SHAP_path, low_memory=False)
+        self.SHAP = DF
+        return self.SHAP
+
+class IMAGEN_posthoc(INSTRUMENT_loader,HDF5_loader,RUN_loader,SHAP_loader):
     def __init__(self, DATA_DIR="/ritter/share/data/IMAGEN"):
         """ Set up path
         
@@ -977,7 +1494,6 @@ class IMAGEN_posthoc(INSTRUMENT_loader, HDF5_loader, RUN_loader):
         Notes
         -----
         Each Instrument has different Session and ID cases
-        Tree Algorithm implementation needed for extension
         
         Examples
         --------
@@ -985,19 +1501,18 @@ class IMAGEN_posthoc(INSTRUMENT_loader, HDF5_loader, RUN_loader):
         >>> DATA = IMAGEN_posthoc()
         >>> DF3 = DATA.to_INSTURMENT(
         ...     LIST,                            # instrument list
-        ...     NAME,                            # instrument name
         ...     save = True)
 
         """
-        T = pd.merge(LIST[0], LIST[1], on=['ID','Session'], how='outer')
-        R = pd.merge(T, LIST[2], on=['ID','Session'], how='outer')
-        E = pd.merge(R, LIST[3], on=['ID','Session'], how='outer')
-        E = pd.merge(E, LIST[4], on=['ID','Session'], how='outer')
-        P = pd.merge(E, LIST[5], on=['ID','Session'], how='outer')
-        L = pd.merge(P, LIST[6], on=['ID','Session'], how='outer')
-        Z = pd.merge(L, LIST[7], on=['ID','Session'], how='outer')
+        if len(LIST)==1:
+            self.INSTRUMENT = LIST[0]
+        else:
+            Z = pd.merge(LIST[0],LIST[1],on=['ID','Session'],how='outer')
+            if len(LIST)!=2:
+                for n in LIST[2:]:
+                    Z = pd.merge(Z,n,on=['ID','Session'],how='outer')
         self.INSTRUMENT = Z
-        
+
         if save == True:
             save_path = f"{self.DATA_DIR}/posthoc/IMAGEN_INSTRUMENT.csv"
             # set the save option
@@ -1228,15 +1743,15 @@ class IMAGEN_posthoc(INSTRUMENT_loader, HDF5_loader, RUN_loader):
         ONLY FU3 implementation, other seession need modification
         
         """
-        INST = self.read_INSTRUMENT(DATA[0])
-        HDF5 = self.read_HDF5(DATA[1])
+        HDF5 = self.read_HDF5(DATA[0])
+        INST = self.read_INSTRUMENT(DATA[1])
         RUN = self.read_RUN(DATA[2])
         
-        I_FU3 = INST.groupby('Session').get_group('FU3')
         H_FU3 = HDF5.groupby('Session').get_group('FU3')
+        I_FU3 = INST.groupby('Session').get_group('FU3')
         R_FU3 = RUN.groupby('Session').get_group('FU3')
-        HR_FU3 = pd.merge(H_FU3, R_FU3, on=['ID','Session'], how='outer')
-        DF = pd.merge(I_FU3, HR_FU3, on=['ID','Session'], how='inner')
+        HR_FU3 = pd.merge(H_FU3, R_FU3, on=['ID','Session'], how='left')
+        DF = pd.merge(HR_FU3, I_FU3, on=['ID','Session'], how='left')
         self.posthoc = DF
         
         if save == True:

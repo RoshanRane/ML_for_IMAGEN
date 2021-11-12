@@ -2,262 +2,19 @@
 #!/usr/bin/env python
 # coding: utf-8
 """ IMAGEN Posthoc Analysis Visualization """
-# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 23th October 2021
+# Author: JiHoon Kim, <jihoon.kim@fu-berlin.de>, 4th November 2021
 #
-import math
+import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import seaborn as sns
+
 from scipy.stats import shapiro, levene, ttest_ind, bartlett
 from statannot import add_stat_annotation
 import warnings
 
-import os
-import numpy as np
-import pandas as pd 
-from glob import glob
-import matplotlib.pyplot as plt
-import shap
-import h5py
-import pickle
-from joblib import load
-import parmap
-
-class SHAP_visualization:
-    def __init__(self, DATA_DIR="/ritter/share/data/IMAGEN"):
-        """ Set up path
-        
-        Parameters
-        ----------
-        DATA_DIR : string, optional
-            Directory IMAGEN absolute path
-        
-        """
-        # Set the directory path: IMAGEN
-        self.DATA_DIR = DATA_DIR   
-        
-    def get_model(self, MODEL_DIR):
-        """ Load the model
-        
-        Parameters
-        ----------
-        MODEL_DIR : string
-            Directory saved Model path
-        
-        Returns
-        -------
-        self.MODELS : dictionary
-            model configuration
-        
-        Examples
-        --------
-        >>> from plot_result_posthoc import *
-        >>> MODEL = SHAP_visualization()
-        >>> DICT = MODEL.get_model(
-        ...     'MODEL_DIR')                  # MODELS
-        
-        Notes
-        -----
-        All the models weighted files are contained in same folder.
-        
-        """
-        
-        models_dir = sorted(glob(MODEL_DIR))[-1]
-        models = {}
-        model_names = list(set([f.split("_")[0] for f in os.listdir(models_dir) if f.split(".")[-1]=="model"]))
-        for model_name in model_names:
-            models.update({model_name: [load(f) for f in glob(models_dir+f"/{model_name}_*.model")]})
-        self.MODELS = models
-        self.MODEL_NAME = model_names
-        return self.MODELS
-        
-    def get_train_data(self, H5_DIR, group=False):
-        """ Load the train data
-        
-        Parameters
-        ----------
-        H5_DIR : string
-            Directory saved File path
-        group : boolean
-            If True then generate the gorup_mask
-            
-        Returns
-        -------
-        self.tr_X : numpy.ndarray
-            Data, hdf5 file
-        self.tr_X_col_names : numpy.ndarray
-            X features name list
-        self.tr_Other : list
-            at least contain y, numpy.ndarray or other Group mask
-            
-        Examples
-        --------
-        >>> from plot_result_posthoc import *
-        >>> DATA = SHAP_visualization()
-        >>> tr_X, tr_X_col_names, tr_Other = DATA.get_train_data(
-        ...     'H5_DIR')                                  # DATA
-        
-        """
-        data = h5py.File(H5_DIR, 'r')
-        print(data.keys(), data.attrs.keys())
-        X = data['X'][()]
-        X_col_names = data.attrs['X_col_names']
-        self.tr_X = X
-        self.tr_X_col_names = X_col_names
-        
-        y = data[data.attrs['labels'][0]][()]
-        if group == True:
-            sex_mask = data['sex'].astype(bool)[()]
-            class_mask = data['Binge'][()].astype(bool)
-            self.tr_Other = [y, sex_mask, class_mask]
-        else:
-            self.tr_Other = [y]
-        X.shape, len(X_col_names)
-        return self.tr_X, self.tr_X_col_names, self.tr_Other
-
-    def get_holdout_data(self, H5_DIR, group=False):
-        """ Load the holdout data
-        
-        Parameters
-        ----------
-        H5_DIR : string
-            Directory saved File path
-        group : boolean
-            If True then generate the gorup_mask
-            
-        Returns
-        -------
-        self.ho_X : numpy.ndarray
-            Data, hdf5 file
-        self.ho_X_col_names : numpy.ndarray
-            X features name list
-        self.ho_Other : list
-            at least contain y, numpy.ndarray or other Group mask
-            
-        Examples
-        --------
-        >>> from plot_result_posthoc import *
-        >>> DATA = SHAP_visualization()
-        >>> ho_X, ho_X_col_names, ho_Other = DATA.get_train_data(
-        ...     'H5_DIR')                                  # DATA
-        
-        """
-        data = h5py.File(H5_DIR, 'r')
-        print(data.keys(), data.attrs.keys())
-        X = data['X'][()]
-        X_col_names = data.attrs['X_col_names']
-        self.ho_X = X
-        self.ho_X_col_names = X_col_names
-        
-        y = data[data.attrs['labels'][0]][()]
-        if group == True:
-            sex_mask = data['sex'][()]
-            class_mask = data['Binge'][()]
-            self.ho_Other = [y, sex_mask, class_mask]
-        else:
-            self.ho_Other = [y]
-        X.shape, len(X_col_names)
-        return self.ho_X, self.ho_X_col_names, self.ho_Other
-    
-    def get_list(self, MODELS, X):
-        """ Generate the SHAP input value list
-        
-        Parameters
-        ----------
-        MODELS : dictionary
-            model configuration
-        X : numpy.ndarray
-            Data, hdf5 file
-        
-        Returns
-        -------
-        self.INPUT : list
-            SHAP input combination list
-        
-        Examples
-        --------
-        >>> from plot_result_posthoc import *
-        >>> DATA = SHAP_visualization()
-        >>> INPUT = DATA.get_list(
-        ...     'MODELS',                 # MODELS
-        ...     'X')                      # X
-        
-        Notes
-        -----
-        Expected output below:
-        INPUT = [
-            [['SVM-RBF'], X, 0],
-            [['SVM-RBF'], X, 1],
-            [['SVM-RBF'], X, 2],
-            [['SVM-RBF'], X, 3],
-            ...
-            [['GB'],      X, 5],
-            [['GB'],      X, 6]
-        ]
-        
-        """
-        INPUT = []
-        for model_name in MODELS:
-            for i, model in enumerate(MODELS[model_name]):
-                LIST = [model_name.upper(), X, i]
-                INPUT.append(LIST)
-        self.INPUT = INPUT
-        return self.INPUT
-    
-    def to_SHAP(self, INPUT, save = True):
-        """ Generate the SHAP value
-        
-        Parameters
-        ----------
-        INPUT: list
-            SHAP INPUT: Model name, X, and N - trial number
-        save : boolean
-            Defualt save the shap_value
-        
-        Examples
-        --------
-        >>> from plot_result_posthoc import *
-        >>> DATA = SHAP_visualization()
-        >>> _ = DATA.to_SHAP(
-        ...     'INPUT',                   # INPUT
-        ...     save=True)                 # save        
-        
-        Notes
-        -----
-        explainers generate the SHAP value
-        
-        """
-        MODEL = INPUT[0]
-        X = INPUT[1]
-        N = INPUT[2]
-        # 100 instances for use as the background distribution
-        X100 = shap.utils.sample(X, 100) 
-        for model_name in self.MODELS:
-            if (model_name.upper() not in MODEL):
-#                 print(f"skipping model {model_name}")
-                continue
-#             print(f"generating SHAP values for model = {model_name} ..")
-            for i, model in enumerate(self.MODELS[model_name]):
-                if i!=N:
-#                     print(f"Skipping model '{model_name}': {i}' as it is taking too long")
-                    continue
-                if i==N:
-#                     print(f"generating SHAP values for model = {model_name}:{i} ..")
-                    explainer = shap.Explainer(model.predict, X100, output_names=["Healthy","AUD-risk"])
-                    shap_values = explainer(X)
-                if save == True:
-                    if not os.path.isdir("explainers"):
-                        os.makedirs("explainers")
-                    with open(f"explainers/{model_name+str(i)}_multi.sav", "wb") as f:
-                        pickle.dump(shap_values, f)
-        
-
-    def plot_SHAP(MODEL, DATA, PLOT):
-        # 1. choose the model (i = [0:6])
-        # 2. subgroup: triaining and holdout
-        # 3. plot: summary_plot bar, dot and summary_plot
-        pass
-    
 def ml_plot(train, test, col):
+    # model prediction plot
     fig, axes = plt.subplots(nrows=3, ncols=6, figsize=(3*len(col), 18))
     # 0,0. Training set
     ax0 = sns.countplot(data=train, x='Model',
@@ -341,7 +98,7 @@ def ml_plot(train, test, col):
     # 0,5. Prediction TF
     ax5 = sns.violinplot(data=test, x="Model", y=col,
                          inner="quartile", split=True,
-                         hue='Sex', hue_order=['Male', 'Female'],
+                         hue='Predict TF', hue_order=['TP & TN', 'FP & FN'],
                          ax = axes[0,5], palette="Set1")
         
     axes[0,5].set_title(f'{col}, Holdout Set')
@@ -560,8 +317,9 @@ def ml_plot(train, test, col):
                                    (("SVM-lin","FP"),("SVM-lin","FN")),
                                    (("SVM-rbf","FP"),("SVM-rbf","FN"))],
                         loc='inside', verbose=2, line_height=0.1)
-
+    
 def sc_plot(IN, data, col):
+    # sex and class plot
     fig, axes = plt.subplots(nrows=4, ncols=len(col)+1, figsize=(6*len(col), 7*4))
     # By class    
     ax = sns.countplot(data=data, x="Class", order=['HC', 'AAM'],
@@ -678,3 +436,86 @@ def sc_plot(IN, data, col):
             data.groupby(['Session','Sex','Class'])[col].mean(),
             data.groupby(['Session','Class','Sex'])[col].mean(),
             data.groupby(['Session','Sex'])[col].mean()]
+
+def violin_plot(DATA, ROI):
+    # violin plot
+    for col in ROI:
+        sns.set(style="whitegrid", font_scale=1)
+        fig, axes = plt.subplots(nrows=1, ncols=len(DATA), figsize = ((len(DATA)+1)**2, len(DATA)+1))
+        fig.suptitle(f'{col}', fontsize=15)
+        for i, (Key, DF) in enumerate(DATA):
+            axes[i].set_title(f'{Key} = {str(len(DF[col].dropna()))}')
+            sns.violinplot(x="Class", y=col, data = DF, order=['HC', 'AAM'],
+                           inner="quartile", ax = axes[i], palette="Set2")
+            add_stat_annotation(ax = axes[i], data=DF, x="Class", y=col,
+                                box_pairs = [("HC","AAM")], order=["HC","AAM"],
+                                test='t-test_ind', text_format='star', loc='inside')
+            
+def session_plot(DATA, ROI):
+    # session plot
+    for (S, DF) in DATA:
+        columns = ROI
+        sns.set(style="whitegrid", font_scale=1.5)
+        fig, axes = plt.subplots(nrows=1, ncols=len(columns)+1,
+                                 figsize=((len(columns)+1)**2, len(columns)+1))
+        sns.countplot(x="Class", hue='Sex', order=['HC', 'AAM'], data = DF,
+                      ax = axes[0], palette="Set2").set(title=S)
+        
+        for i, j in enumerate(columns):
+            axes[i+1].set_title(columns[i])
+            sns.violinplot(x="Class", y=j, data=DF, order=['HC', 'AAM'],
+                           inner="quartile", ax = axes[i+1], palette="Set1")
+            add_stat_annotation(ax = axes[i+1], data=DF, x="Class", y=j,
+                                box_pairs = [("HC","AAM")], order=["HC","AAM"],
+                                test='t-test_ind', text_format='star', loc='inside')
+            
+def plot_SHAP(MODEL, DATA, PLOT):
+    # plot: summary_plot bar, dot and summary_plot
+    pass
+
+def SHAP_table(DF, viz = False):
+    # DTI type
+    DTI0 = [i for i in zip(DF['SVM rbf0 name'], DF['sorted SVM rbf0 mean'], DF['sorted SVM rbf0 std']) if 'DTI_' in i[0]]
+    DTI1 = [i for i in zip(DF['SVM rbf1 name'], DF['sorted SVM rbf1 mean'], DF['sorted SVM rbf1 std']) if 'DTI_' in i[0]]
+    DTI2 = [i for i in zip(DF['SVM rbf2 name'], DF['sorted SVM rbf2 mean'], DF['sorted SVM rbf2 std']) if 'DTI_' in i[0]]
+    DTI3 = [i for i in zip(DF['SVM rbf3 name'], DF['sorted SVM rbf3 mean'], DF['sorted SVM rbf3 std']) if 'DTI_' in i[0]]
+    DTI4 = [i for i in zip(DF['SVM rbf4 name'], DF['sorted SVM rbf4 mean'], DF['sorted SVM rbf4 std']) if 'DTI_' in i[0]]
+    DTI5 = [i for i in zip(DF['SVM rbf5 name'], DF['sorted SVM rbf5 mean'], DF['sorted SVM rbf5 std']) if 'DTI_' in i[0]]
+    DTI6 = [i for i in zip(DF['SVM rbf6 name'], DF['sorted SVM rbf6 mean'], DF['sorted SVM rbf6 std']) if 'DTI_' in i[0]]
+    # T1w Subcortical type
+    SUBCOR0 = [i for i in zip(DF['SVM rbf0 name'], DF['sorted SVM rbf0 mean'], DF['sorted SVM rbf0 std']) if 'T1w_subcor_' in i[0]]
+    SUBCOR1 = [i for i in zip(DF['SVM rbf1 name'], DF['sorted SVM rbf1 mean'], DF['sorted SVM rbf1 std']) if 'T1w_subcor_' in i[0]]
+    SUBCOR2 = [i for i in zip(DF['SVM rbf2 name'], DF['sorted SVM rbf2 mean'], DF['sorted SVM rbf2 std']) if 'T1w_subcor_' in i[0]]
+    SUBCOR3 = [i for i in zip(DF['SVM rbf3 name'], DF['sorted SVM rbf3 mean'], DF['sorted SVM rbf3 std']) if 'T1w_subcor_' in i[0]]
+    SUBCOR4 = [i for i in zip(DF['SVM rbf4 name'], DF['sorted SVM rbf4 mean'], DF['sorted SVM rbf4 std']) if 'T1w_subcor_' in i[0]]
+    SUBCOR5 = [i for i in zip(DF['SVM rbf5 name'], DF['sorted SVM rbf5 mean'], DF['sorted SVM rbf5 std']) if 'T1w_subcor_' in i[0]]
+    SUBCOR6 = [i for i in zip(DF['SVM rbf6 name'], DF['sorted SVM rbf6 mean'], DF['sorted SVM rbf6 std']) if 'T1w_subcor_' in i[0]]
+    # T2w Subcortical type
+    COR0 = [i for i in zip(DF['SVM rbf0 name'], DF['sorted SVM rbf0 mean'], DF['sorted SVM rbf0 std']) if 'T1w_cor_' in i[0]]
+    COR1 = [i for i in zip(DF['SVM rbf1 name'], DF['sorted SVM rbf1 mean'], DF['sorted SVM rbf1 std']) if 'T1w_cor_' in i[0]]
+    COR2 = [i for i in zip(DF['SVM rbf2 name'], DF['sorted SVM rbf2 mean'], DF['sorted SVM rbf2 std']) if 'T1w_cor_' in i[0]]
+    COR3 = [i for i in zip(DF['SVM rbf3 name'], DF['sorted SVM rbf3 mean'], DF['sorted SVM rbf3 std']) if 'T1w_cor_' in i[0]]
+    COR4 = [i for i in zip(DF['SVM rbf4 name'], DF['sorted SVM rbf4 mean'], DF['sorted SVM rbf4 std']) if 'T1w_cor_' in i[0]]
+    COR5 = [i for i in zip(DF['SVM rbf5 name'], DF['sorted SVM rbf5 mean'], DF['sorted SVM rbf5 std']) if 'T1w_cor_' in i[0]]
+    COR6 = [i for i in zip(DF['SVM rbf6 name'], DF['sorted SVM rbf6 mean'], DF['sorted SVM rbf6 std']) if 'T1w_cor_' in i[0]]
+    # Common Features
+    set_DTI = (set([i[0] for i in DTI0]) & set([i[0] for i in DTI1])  & set([i[0] for i in DTI2]) & set([i[0] for i in DTI3]) &
+               set([i[0] for i in DTI4]) & set([i[0] for i in DTI5]) & set([i[0] for i in DTI6]))
+    set_T1w_Sub = (set([i[0] for i in SUBCOR0]) & set([i[0] for i in SUBCOR1]) & set([i[0] for i in SUBCOR2]) & 
+                   set([i[0] for i in SUBCOR3]) & set([i[0] for i in SUBCOR4]) & set([i[0] for i in SUBCOR5]) & set([i[0] for i in SUBCOR6]))
+    set_T1w_Cor = (set([i[0] for i in COR0]) & set([i[0] for i in COR1]) & set([i[0] for i in COR2]) &
+                   set([i[0] for i in COR3]) & set([i[0] for i in COR4]) & set([i[0] for i in COR5]) & set([i[0] for i in COR6]))
+    # Generate the table
+    d = [["DTI", len(DTI0), len(DTI1), len(DTI2), len(DTI3), len(DTI4), len(DTI5), len(DTI6), len(set_DTI)],
+         ["T1w subcortical",len(SUBCOR0), len(SUBCOR1), len(SUBCOR2), len(SUBCOR3), len(SUBCOR4), len(SUBCOR5), len(SUBCOR6), len(set_T1w_Sub)],
+         ["T1w cortical",len(COR0), len(COR1), len(COR2), len(COR3), len(COR4), len(COR5), len(COR6), len(set_T1w_Cor)]]
+    df = pd.DataFrame(d, columns = ['Type','SVM-rbf 0','SVM-rbf1','SVM-rbf2','SVM-rbf3','SVM-rbf4','SVM-rbf5','SVM-rbf6','Intersection'])
+    
+    if viz == True:
+#         print("DTI:    ",len(DTI0), len(DTI1), len(DTI2), len(DTI3), len(DTI4), len(DTI5), len(DTI6))
+#         print("SUBCOR: ",len(SUBCOR0), len(SUBCOR1), len(SUBCOR2), len(SUBCOR3), len(SUBCOR4), len(SUBCOR5), len(SUBCOR6))
+#         print("COR:    ",len(COR0), len(COR1), len(COR2), len(COR3), len(COR4), len(COR5), len(COR6))
+        print(f"selected DTI (n={len(set_DTI)}): {set_DTI} \n\n"
+              f"selected T1w Subcortical: (n={len(set_T1w_Sub)}): {set_T1w_Sub} \n\n"
+              f"selected T1w Cortical: (n={len(set_T1w_Cor)}): {set_T1w_Cor} \n\n")
+    return df
