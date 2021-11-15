@@ -22,19 +22,23 @@ from tqdm import tqdm
 # Define settings for the experiment 
 DATA_DIR = "/ritter/share/data/IMAGEN"
 H5_FILES_PATH = "/ritter/share/data/IMAGEN/h5files"
-## Permutation tests
-# Total number of permutation tests to run. Set to 0 to not perform any permutations. 
-N_PERMUTATIONS = 0
-PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
-# if set to true it will run 1 trial with no parallel jobs and enables debug msgs
-DEBUG = False
     
 # directories of all 3 timepoints
 tp_dirs = ['newlbls-clean-bl-espad-fu3-19a-binge-n620/*/',
            'newlbls-clean-fu2-espad-fu3-19a-binge-n634/*/', 
            'newlbls-clean-fu3-espad-fu3-19a-binge-n650/*/'] #todo site# :: 'across_sites/lbls-bl-*'
+
 HOLDOUT_DIR = "/ritter/share/data/IMAGEN/h5files/newholdout-clean-{}*{}*.h5" #todo site# newholdout:: h5files/holdout-
 SAVE_PATH = "results/holdout-alltp-clean_run.csv" #todo site# #holdout_results :: holdout_results_sites 
+
+## Permutation tests
+# Total number of permutation tests to run. Set to 0 to not perform any permutations. 
+N_PERMUTATIONS = 1000
+PERMUTE_ONLY_MODELS = ['SVM-rbf', 'GB']
+PARALLELIZE = True # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
+# if set to true it will run 1 trial with no parallel jobs and enables debug msgs
+DEBUG = False
+
 EXTRA_INFERENCE_DIR = False# "/ritter/share/data/IMAGEN/h5files/mediumextras-{}*{}*.h5"
 
 if DEBUG:
@@ -141,11 +145,12 @@ if __name__ == "__main__":
         print(f"ML model (retraining): \t{model_path}")
 
         model = load(model_path)
-
+        n_permutes = N_PERMUTATIONS if row.model in PERMUTE_ONLY_MODELS else 0
+        
         # 4) run the retraining & hyperparameter tuning and generate report
         report = m.run(model, grid=model_grids[row.model], 
                        n_splits=5, conf_corr_params={"conf_corr_cb__groups": m.confs["group"]}, 
-                       permute=N_PERMUTATIONS, verbose=1)
+                       permute=n_permutes, verbose=1)
 
         print("train_score: {:0.2f}% \t valid_score: {:0.2f}% \t holdout_score: {:0.2f}".format(
          report['train_score']*100, report['valid_score']*100, report['test_score']*100))
