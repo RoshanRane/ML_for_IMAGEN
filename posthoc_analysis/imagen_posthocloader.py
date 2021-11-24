@@ -1440,32 +1440,64 @@ class SHAP_loader:
         std_SHAP = list(DF_SHAP.apply(abs).std())
         return mean_SHAP, std_SHAP
     
-    def load_SHAP(self, SHAP):
-        """ Generate the mean and std of SHAP value
+    def load_SHAP(self, HDF5, SHAP, save=False):
+        """ Generate the pandas dataframe of the SHAP value
         
         Parameters
         ----------
+        HDF5 : .hdf5 file
+            Load the ID, X_Col_names value
+        
         SHAP : .sav file
             Load the SHAP value
+        
+        Returns
+        -------
+        DF : pandas.dataframe
+            SHAP value dataframe
+        
+        Note
+        ----
+        Sex mask is not implemented
         
         Examples
         --------
         >>> from imagen_posthocloader import *
         >>> DATA = SHAP_loader()
         >>> mean_SHAP, std_SHAP = DATA.load_SHAP(
-        ...     'SHAP')                     # SHAP
+        ...     'HDF5',                      # HDF5
+        ...     'SHAP')                      # SHAP    
         
         """
+        _, X_col, Other = self.get_holdout_data(HDF5)
         with open(self.DATA_DIR+"/posthoc/explainers/"+SHAP, 'rb') as fp:
             load_shap_values = pickle.load(fp)
-        SHAP_list = []
-        for data in load_shap_values:
-            value = [data[i].values for i in range(data.shape[0])]
-            SHAP_list.append(value)
-        DF_SHAP = pd.DataFrame(SHAP_list)
-        mean_SHAP = list(DF_SHAP.mean())
-        std_SHAP = list(DF_SHAP.std())
-        return mean_SHAP, std_SHAP
+        
+        Info = SHAP.split('_')
+        Model = Info[0][:-1]
+        Session = Info[-1].replace(".sav","")
+        Trial = Info[0][-1:]
+        Class = ['HC' if i==0 else 'AAM' for i in Other[0]]
+        ID = Other[1]
+        
+        df = pd.DataFrame(
+            {'ID' : ID,
+             'Session' : Session,
+             'Trial' : Trial,
+             'Model' : Model,
+             'Class' : Class
+            }
+        )
+        df2 = pd.DataFrame(load_shap_values.values, columns=X_col)
+        DF = pd.concat([df, df2], axis=1)
+        
+        if save == True:
+            save_path = f"{self.DATA_DIR}/posthoc/explainers/all_{Info[0]}_{Session}_SHAP.csv"
+            # set the save option
+            if not os.path.isdir(os.path.dirname(save_path)):
+                os.makedirs(os.path.dirname(save_path))
+            DF.to_csv(save_path, index=None)
+        return DF
 
 class IMAGEN_posthoc(INSTRUMENT_loader,HDF5_loader,RUN_loader,SHAP_loader):
     def __init__(self, DATA_DIR="/ritter/share/data/IMAGEN"):
@@ -1799,7 +1831,29 @@ class IMAGEN_posthoc(INSTRUMENT_loader,HDF5_loader,RUN_loader,SHAP_loader):
                 os.makedirs(os.path.dirname(save_path))
             DF.to_csv(save_path, index=None)
         return DF
-            
+    
+    def to_SHAP(self, SHAP, NAME, save=False):
+        """ Load the SHAP file
+        
+        Parameters
+        ----------
+        SHAP : list
+            List of the SHAP files, all_model*_session*_SHAP (*.csv)
+        
+        Returns
+        -------
+        DF : pandas.dataframe
+            The unified SHAP file (*.csv)
+        
+        """
+        DF = pd.concat(SHAP)
+        if save == True:
+            save_path = f"{self.DATA_DIR}/posthoc/explainers/{NAME}"
+            if not os.path.isdir(os.path.dirname(save_path)):
+                os.makedirs(os.path.dirname(save_path))
+            DF.to_csv(save_path, index=None)
+        return DF
+    
     def read_INSTRUMENT(self, instrument_file):
         """ Load the Instruemnt file
         
