@@ -38,20 +38,21 @@ torch.backends.cudnn.benchmark = True
 # H5_FILES = [(train_data, holdout_data), ...]
 H5_FILES = [("/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-z2-bingel3u6-n*.h5", #fullbrain-adni_*.h5",
              "/ritter/share/data/IMAGEN/h5files/fullbrain-fu3-hold-z2-bingel3u6-n*.h5" #fullbrain-adni-hold_*.h5",
-            )]
+            ),]
 
 CONF_CTRL_TECHS = ["none"] # todo test 'loo-site', 'loo-sex' 
 K_FOLD_CV = True
 N_CV_TRIALS = 5
+OUT_FOLDER_SUFFIX = '' # provide a custom suffix that will be used in the output results folder created
 
-GPUS= [3,4,5,6,7]
+GPUS= [1]
 MAX_GPUS_IN_PARALLEL= N_CV_TRIALS # maximum number of GPUs to use at once 
 
-RUN_CONFS = True
+RUN_CONFS = False
 RAND_STATE = None
 RUN_CHI_SQUARE = False 
 
-DEBUG = False
+DEBUG = True
 
 # The DL model to train and it's corresponding hyperparameters as tuples i.e. (pipeline, grid)
 MODEL_SETTINGS = [
@@ -97,9 +98,11 @@ def main():
                 SAVE_DIR = "results/debug_run/{}".format(
                 start_time.strftime("%Y%m%d-%H%M"))
             else:
+                outfoldername = start_time.strftime("%Y%m%d-%H%M")
+                if OUT_FOLDER_SUFFIX: outfoldername = OUT_FOLDER_SUFFIX + '_' + outfoldername
                 SAVE_DIR = "results/{}/{}".format(
                     os.path.basename(h5_file).replace(".h5","").replace("*",""),
-                    start_time.strftime("%Y%m%d-%H%M"))
+                    outfoldername)
             if not os.path.isdir(SAVE_DIR): os.makedirs(SAVE_DIR)
             if not len(os.listdir(SAVE_DIR))==0: 
                 print(f"[WARN] output dir '{SAVE_DIR}' is not empty.. might overwrite..")
@@ -215,10 +218,10 @@ def main():
             df = df.sort_values(['conf_ctrl_tech','i','o','run_id']) # sort
             df.to_csv(join(SAVE_DIR, "run.csv"), index=False)                       
 
-            # calculate the chi-square statistics between confounds and label if requested
-            if RUN_CHI_SQUARE and conf_names:
-                run = run_chi_sq(data, conf_names)
-                run.to_csv(join(SAVE_DIR, "chi-square.csv"), index=False)                
+#             # calculate the chi-square statistics between confounds and label if requested
+#             if RUN_CHI_SQUARE and conf_names:
+#                 run = run_chi_sq(data, conf_names)
+#                 run.to_csv(join(SAVE_DIR, "chi-square.csv"), index=False)                
                 
             runtime=str(datetime.now()-start_time).split(".")[0]
             print("TOTAL RUNTIME: {} secs".format(runtime))
