@@ -47,12 +47,12 @@ RUN_CHI_SQUARE = False # runs a chi-square analysis between the label and all th
 
 ## Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
-N_PERMUTATIONS = 0 
+N_PERMUTATIONS = 0
 PERMUTE_ONLY_XY = True
 N_JOBS = 2 # parallel jobs
 PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
-DEBUG = False ####
+DEBUG = True ####
     
 if DEBUG:
     N_OUTER_CV = 2
@@ -295,12 +295,11 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
                         else:
                             splitter = StratifiedKFold(n_splits=N_OUTER_CV, shuffle=True, random_state=0)
                             test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], y=labels[y])] # dd: not performing stratify_by_conf='group' cuz stratification compromises the testset purity as the labels of the testset affects the data splitting and reduces variance in data      
-                            
-                        if conf_ctrl_tech=='baseline-cb': # if 'baseline-cb' then control only for 'sex' and 'site' not for any additional variable/s given
-                            conf_names = ['sex', 'site'] # hack # hardcoded
+                        conf_run_names = conf_names 
+                        if conf_ctrl_tech=='baseline-cb': conf_run_names = ['sex', 'site'] # if 'baseline-cb' then control only for 'sex' and 'site' not for any additional variable/s given                           
                             
                         for trial in range(N_OUTER_CV):
-                            settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": conf_names,
+                            settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": conf_run_names,
                                               "io":io, "model_pipegrid":model_pipegrid, 
                                               "trial":trial, 
                                               "test_idx":test_idxs[trial]}]) 

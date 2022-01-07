@@ -10,7 +10,7 @@ import sklearn.metrics as metrics
 
 
 def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
-                no_confs=False, sorty_by=None, join=False):
+                no_confs=False, sorty_by=None, join=False, beautify_io=True):
     
     input_types_cnt = 0
     if isinstance(df_full, (list, tuple)):
@@ -49,7 +49,8 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
         df = compute_metric(df, x)
     
     # make io labels latex formated
-    df.loc[:,"io"] = df.apply(remap_io, axis=1)
+    if beautify_io:
+        df.loc[:,"io"] = df.apply(remap_io, axis=1)
     df[x] = df[x].apply(lambda x: x*100)   
     
     # setup the figure properties
@@ -68,8 +69,7 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
         y="io_n" 
     y_order = get_y_order(df, y, sorty_by)
     for ((t, dfi), ax) in zip(df.groupby("technique"), axes):   
-        
-        assert (len(set(y_order) - set(dfi[y].unique())))==0
+        assert (len(set(y_order) - set(dfi[y].unique())))==0 or ('baseline-cb' in df["technique"].unique())
         all_models = dfi["model"].unique()
         # plotting details
         palette = sns.color_palette()
