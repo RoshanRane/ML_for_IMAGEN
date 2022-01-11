@@ -39,20 +39,20 @@ DATA_DIR = "/ritter/share/data/IMAGEN"
 N_OUTER_CV = 7 # number of folds in inner crossvalidation for test score estimation
 N_INNER_CV = 5 # number of folds in inner crossvalidation used for hyperparameter tuning
 ## Optional runs
-RUN_CONFS = False
-CONF_CTRL_TECHS = ["cb"] # choose from ["baseline", "cb", "cr", "loso"] 
-SAVE_MODELS = True # saves the final trained models but only for io=={X-y} and conf_ctrl_tech=='CB' 
+RUN_CONFS = True ####
+CONF_CTRL_TECHS = ["baseline-cb", "cb"] # choose from ["baseline", "cb", "cr", "loso"]  ####
+SAVE_MODELS = False # saves the final trained models but only for io=={X-y} and conf_ctrl_tech=='CB' ####
 RUN_PBCC = False # run the prediction-based post-prediction conf_ctrl_tech by Dinga et al. 2020
-RUN_CHI_SQUARE = True # runs a chi-square analysis between the label and all the confounds (todo: only supports categorical confounds)
+RUN_CHI_SQUARE = False # runs a chi-square analysis between the label and all the confounds (todo: only supports categorical confounds)
 
 ## Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
 N_PERMUTATIONS = 0
 PERMUTE_ONLY_XY = True
-N_JOBS = 3 # parallel jobs
+N_JOBS = 2 # parallel jobs
 PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
-DEBUG = False
+DEBUG = True ####
     
 if DEBUG:
     N_OUTER_CV = 2
@@ -106,38 +106,39 @@ MODEL_PIPEGRIDS = [
 ]
 
 # Here you can select which HDF5 files you want to include in analysis. 
-H5_FILES = [ 
+H5_FILES = [  ####
 ### main
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-freq-audit-quick-n614.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-total-audit-n687.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit2-amount-n567.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-gm-fine-cluster-audit-growth-n759.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-espad-fu3-19a-binge-n620.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-espad-fu3-29d-onset-15-n654.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-espad-fu3-8b-frequency-n675.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-espad-gm-fine-cluster-binge-growth-n661.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-our-combo-cluster-combined-ours-n566.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-phenotype-phenotype-combined-seo-n740.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-audit-fu3-audit-freq-audit-quick-n628.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-audit-fu3-audit-total-audit-n705.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-audit-fu3-audit2-amount-n572.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-audit-gm-fine-cluster-audit-growth-n713.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-espad-fu3-19a-binge-n634.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-espad-fu3-29d-onset-15-n666.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-espad-fu3-8b-frequency-n698.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-espad-gm-fine-cluster-binge-growth-n679.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-our-combo-cluster-combined-ours-n582.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-phenotype-phenotype-combined-seo-n782.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-audit-fu3-audit-freq-audit-quick-n623.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-audit-fu3-audit-total-audit-n708.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-audit-fu3-audit2-amount-n585.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-audit-gm-fine-cluster-audit-growth-n589.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-espad-fu3-19a-binge-n650.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-espad-fu3-29d-onset-15-n697.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-espad-fu3-8b-frequency-n709.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-espad-gm-fine-cluster-binge-growth-n570.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-our-combo-cluster-combined-ours-n588.h5',
- '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-phenotype-phenotype-combined-seo-n589.h5',
+'/ritter/share/data/IMAGEN/h5files/posthoc-cc-ctq-denial-su-n650.h5'
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-freq-audit-quick-n614.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-total-audit-n687.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit2-amount-n567.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-gm-fine-cluster-audit-growth-n759.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-espad-fu3-19a-binge-n620.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-espad-fu3-29d-onset-15-n654.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-espad-fu3-8b-frequency-n675.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-espad-gm-fine-cluster-binge-growth-n661.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-our-combo-cluster-combined-ours-n566.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-phenotype-phenotype-combined-seo-n740.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-audit-fu3-audit-freq-audit-quick-n628.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-audit-fu3-audit-total-audit-n705.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-audit-fu3-audit2-amount-n572.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-audit-gm-fine-cluster-audit-growth-n713.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-espad-fu3-19a-binge-n634.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-espad-fu3-29d-onset-15-n666.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-espad-fu3-8b-frequency-n698.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-espad-gm-fine-cluster-binge-growth-n679.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-our-combo-cluster-combined-ours-n582.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu2-phenotype-phenotype-combined-seo-n782.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-audit-fu3-audit-freq-audit-quick-n623.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-audit-fu3-audit-total-audit-n708.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-audit-fu3-audit2-amount-n585.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-audit-gm-fine-cluster-audit-growth-n589.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-espad-fu3-19a-binge-n650.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-espad-fu3-29d-onset-15-n697.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-espad-fu3-8b-frequency-n709.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-espad-gm-fine-cluster-binge-growth-n570.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-our-combo-cluster-combined-ours-n588.h5',
+#  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-fu3-phenotype-phenotype-combined-seo-n589.h5',
 ]
 
 def conf_corr_run(h5_file, 
@@ -293,9 +294,12 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
                             test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], groups=data['site'])]
                         else:
                             splitter = StratifiedKFold(n_splits=N_OUTER_CV, shuffle=True, random_state=0)
-                            test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], y=labels[y])] # dd: not performing stratify_by_conf='group' cuz stratification compromises the testset purity as the labels of the testset affects the data splitting and reduces variance in data                        
+                            test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], y=labels[y])] # dd: not performing stratify_by_conf='group' cuz stratification compromises the testset purity as the labels of the testset affects the data splitting and reduces variance in data      
+                        conf_run_names = conf_names 
+                        if conf_ctrl_tech=='baseline-cb': conf_run_names = ['sex', 'site'] # if 'baseline-cb' then control only for 'sex' and 'site' not for any additional variable/s given                           
+                            
                         for trial in range(N_OUTER_CV):
-                            settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, 
+                            settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": conf_run_names,
                                               "io":io, "model_pipegrid":model_pipegrid, 
                                               "trial":trial, 
                                               "test_idx":test_idxs[trial]}]) 
@@ -305,7 +309,7 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
             parallel(delayed(
                         conf_corr_run)(
                                     h5_file=h5_file, **setting,
-                                    label_name=y, confs=conf_names, 
+                                    label_name=y, 
                                     save_dir=SAVE_DIR, n_inner_cv=N_INNER_CV, run_pbcc=RUN_PBCC,
                                     parallelize=PARALLELIZE, n_permutes_per_trial=N_PERMUTES_PER_TRIAL,
                                     permute_only_xy=PERMUTE_ONLY_XY, 

@@ -10,7 +10,7 @@ import sklearn.metrics as metrics
 
 
 def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
-                no_confs=False, sorty_by=None, join=False):
+                no_confs=False, sorty_by=None, join=False, beautify_io=True):
     
     input_types_cnt = 0
     if isinstance(df_full, (list, tuple)):
@@ -49,14 +49,15 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
         df = compute_metric(df, x)
     
     # make io labels latex formated
-    df.loc[:,"io"] = df.apply(remap_io, axis=1)
+    if beautify_io:
+        df.loc[:,"io"] = df.apply(remap_io, axis=1)
     df[x] = df[x].apply(lambda x: x*100)   
     
     # setup the figure properties
     sns.set(style='whitegrid', context='paper')
     fig, axes = plt.subplots(1, len(conf_ctrl), 
                              sharex=True, sharey=True, 
-                             dpi=120, figsize=(5*len(conf_ctrl), 1+0.4*(len(ios)+input_types_cnt)))
+                             dpi=120, figsize=(4*len(conf_ctrl), 1+0.4*(len(ios)+input_types_cnt)))
     if not isinstance(axes, np.ndarray): axes = [axes]
     fig.gca().set_xlim([0,100])    
         
@@ -68,8 +69,7 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
         y="io_n" 
     y_order = get_y_order(df, y, sorty_by)
     for ((t, dfi), ax) in zip(df.groupby("technique"), axes):   
-        
-        assert (len(set(y_order) - set(dfi[y].unique())))==0
+        assert (len(set(y_order) - set(dfi[y].unique())))==0 or ('baseline-cb' in df["technique"].unique())
         all_models = dfi["model"].unique()
         # plotting details
         palette = sns.color_palette()
@@ -123,9 +123,9 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
     handles, legends = ax.get_legend_handles_labels()
     leg1 = fig.legend(handles[len(chance):], legends[len(chance):], 
                       title="Models",
-                      bbox_to_anchor=[2.2, 0.89], loc="upper right", fancybox=True, frameon=True)
+                      bbox_to_anchor=[1.13, 0.89], loc="upper right", fancybox=True, frameon=True)
     # only choose the first 'chance' legend
-    leg2 = fig.legend([handles[0]], [legends[0]], loc="lower right")
+    leg2 = fig.legend([handles[0]], [legends[0]], loc="center right")
     fig.add_artist(leg1)
 
     fig.tight_layout()
