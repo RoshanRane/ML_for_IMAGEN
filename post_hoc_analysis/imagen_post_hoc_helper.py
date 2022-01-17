@@ -1810,6 +1810,8 @@ class SHAP_loader:
 #                                 POST HOC ANALYSIS                             #
 #################################################################################
 def load_all_labels(x_tp="FU3", val_type='binarize', exclude_holdout=False): #, "FU2", "BL"
+    x_tp = x_tp.upper()
+    assert x_tp in ["FU3", "FU2", "BL"]
     lbl_combinations = [  
         ("ESPAD_FU3",        '19a',        3, 6,   'Binge'),
         ("ESPAD_GM_FINE",  'cluster',   2, 6,   'Binge_growth'),
@@ -1925,9 +1927,12 @@ def show_corr_with_instrument(instrument, session,
         # Sensitivity Analysis Plot                             #
         # ----------------------------------------------------- #   
 # plot the correlations between the different models
-def get_corr(df, corr_type="r-squared", cols=None, rows=None):
+def get_corr(df, corr_type="r-squared", cols=None, rows=None, vmax=None, vmin=None, mask_diag_repeatitions=False):
     
-    def r_squared(a, b): return (np.corrcoef(a, b)[0,1]**2)*100, np.NaN
+    def r_squared(a, b): 
+        if isinstance(a.iloc[0], str): a = pd.Categorical(a).codes
+        if isinstance(b.iloc[0], str): b = pd.Categorical(b).codes
+        return (np.corrcoef(a, b)[0,1]**2)*100, np.NaN
     
     def accuracy(a, b): return accuracy_score(a, b)*100, np.NaN # no p_val calulated
     
@@ -1936,22 +1941,30 @@ def get_corr(df, corr_type="r-squared", cols=None, rows=None):
     # calculate the correlations
     corr_type = corr_type.lower()
     if corr_type in ['r', 'correlation', 'pearsonr', 'kendalltau', 'spearmanr']:
-        vmin, vmax, cmap = -0.5, 0.5, 'RdBu'
+        if vmax is None: vmax=0.5
+        if vmin is None: vmin=-0.5
+        cmap = 'RdBu'
         try:
             corr_type = getattr(stats, corr_type)
         except: # default to pearsonr correlation
             corr_type = stats.pearsonr
         fmt = '{:.2f}'
     elif corr_type in ['r2','r_squared','r-squared']:
-        vmin, vmax, cmap = 0, 10, 'PuBu'
+        if vmax is None: vmax=90
+        if vmin is None: vmin=0
+        cmap = 'PuBu'
         corr_type = r_squared
         fmt = '{:.1f}%'
     elif corr_type in ['agreement', "accuracy"]:
-        vmin, vmax, cmap = 0, 0.95, 'YlGnBu'
+        if vmax is None: vmax=0.95
+        if vmin is None: vmin=0
+        cmap = 'YlGnBu'
         corr_type = accuracy
         fmt = '{:.0f}%'
     elif corr_type in ['chi2', 'chi-squared']:
-        vmin, vmax, cmap = 0, 100, 'YlGnBu'
+        if vmax is None: vmax=500
+        if vmin is None: vmin=0
+        cmap = 'YlGnBu'
         corr_type = chi_squared
         fmt = '{:.2f}'
 #     elif 'jaccard' in corr_type:
@@ -1981,8 +1994,15 @@ def get_corr(df, corr_type="r-squared", cols=None, rows=None):
 #                 p_val = ''.join(['*' for t in [0.001,0.01,0.05] if p_val<=t])
 #                 df_p_vals.loc[row, col] = p_val
             
+    if mask_diag_repeatitions:
+            # Fill diagonal and upper half with NaNs
+            mask = np.zeros_like(df_corr, dtype=bool)
+            mask[np.triu_indices_from(mask)] = True
+            df_corr[mask] = np.nan
+          
     corr = df_corr.apply(pd.to_numeric).style.format(fmt).background_gradient(
-                vmin=vmin, vmax=vmax, cmap=cmap).set_table_attributes("style='display:inline'").set_caption(corr_type.__name__.title())
+                vmin=vmin, vmax=vmax, cmap=cmap).highlight_null( # make NaNs grey
+        null_color='#f1f1f1').set_table_attributes("style='display:inline'").set_caption(corr_type.__name__.title())
     
     # also color style the p_vals
     def p_val_colors(v):
@@ -2125,7 +2145,9 @@ def plot_subject_classes(dfx, ax, confs=[], sort_order=[], lw=10, title='', fs=1
     
     return ax
 
-def plot_subject_classes_modelwise(model_results, use_probs, lbl='Binge', models=["SVM-rbf","GB","SVM-lin","LR"]):
+def plot_subject_classes_modelwise(model_results, use_probs, 
+                                   lbl='Binge', models=["SVM-rbf","GB","SVM-lin","LR"],
+                                  only_corr=False):
     # prepare a df for plot_subject_classes() function
     for tp, df_model_results in model_results.items():
         print("=======================================\n              TP = ", tp.upper())
@@ -2148,18 +2170,19 @@ def plot_subject_classes_modelwise(model_results, use_probs, lbl='Binge', models
         mask[np.triu_indices_from(mask)] = True
         corr[mask] = np.nan
         display((corr.style.background_gradient(vmin=0, vmax=1).highlight_null(null_color='#f1f1f1')).format(precision=2))  # Color NaNs grey
+        
+        if not only_corr:
+            # visualize the subject class between different models
+            sort_order = [lbl,*models]
 
-        # visualize the subject class between different models
-        sort_order = [lbl,*models]
+            fig, ax = plt.subplots(figsize=(16,len(sort_order)))
 
-        fig, ax = plt.subplots(figsize=(16,len(sort_order)))
-
-        plot_subject_classes(df_ml,
-                             ax, confs=['Sex', 'Site'],
-                             sort_order=sort_order, 
-                             title='Comparison of Model predictions on the same subject',
-                             lw=30, cmap=plt.cm.YlGnBu)
-        plt.show()
+            plot_subject_classes(df_ml,
+                                 ax, confs=['Sex', 'Site'],
+                                 sort_order=sort_order, 
+                                 title='Comparison of Model predictions on the same subject',
+                                 lw=30, cmap=plt.cm.YlGnBu)
+            plt.show()
 
 
         
@@ -2606,7 +2629,7 @@ def get_featuretype_cnt(fs):
     
     dfc = dfc.astype(int)
     
-    return dfc.style.background_gradient(cmap='gray', vmin=0, vmax=len(top_features))
+    return dfc.style.background_gradient(cmap='gray', vmin=0, vmax=len(fs))
 
 def violin_plot(DATA, ROI):
     # violin plot
