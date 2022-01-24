@@ -11,7 +11,7 @@ import pandas as pd
 
 import time
 from datetime import datetime
-from copy import deepcopy
+from copy import copy, deepcopy
 
 from sklearn.metrics import balanced_accuracy_score, roc_auc_score, get_scorer, make_scorer, confusion_matrix
 from sklearn.feature_selection import SelectKBest, VarianceThreshold
@@ -49,10 +49,10 @@ RUN_CHI_SQUARE = False # runs a chi-square analysis between the label and all th
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
 N_PERMUTATIONS = 0
 PERMUTE_ONLY_XY = True
-N_JOBS = 2 # parallel jobs
+N_JOBS = 5 # parallel jobs
 PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
-DEBUG = True ####
+DEBUG = False ####
     
 if DEBUG:
     N_OUTER_CV = 2
@@ -108,7 +108,8 @@ MODEL_PIPEGRIDS = [
 # Here you can select which HDF5 files you want to include in analysis. 
 H5_FILES = [  ####
 ### main
-'/ritter/share/data/IMAGEN/h5files/posthoc-cc-ctq-denial-su-n650.h5'
+'/ritter/share/data/IMAGEN/h5files/posthoc-cc-ctq-denial-sum-n650.h5',
+'/ritter/share/data/IMAGEN/h5files/posthoc-cc-pss-pss-total-n650.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-freq-audit-quick-n614.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-total-audit-n687.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit2-amount-n567.h5',
@@ -149,7 +150,7 @@ def conf_corr_run(h5_file,
     
     start_time_this_thread = datetime.now()
     conf_ctrl_tech = conf_ctrl_tech.lower()
-    i, o = io
+    inp, out = io
     pipe, grid = deepcopy(model_pipegrid)
     model_name = pipe.steps[-1][0].replace("model_", "")    
     print("--------------------------------------")
@@ -176,31 +177,43 @@ def conf_corr_run(h5_file,
             oversample=None
         else:
             oversample=True
+            
+        # if 'baseline-cb' then control only for 'sex' and 'site' not for any of the other additional variable/s given            
+        if 'baseline' in conf_ctrl_tech:
+            # repeat the loading
+            m = MLpipeline(parallelize, random_state=random_state, debug=debug)
+            m.load_data(h5_file, y=label_name, confs=confs, group_confs=True)
+            # correct the 'grouped' confs to only include 'sex' and 'site'
+            m.confs["group"] = m.confs['sex'] + 100*m.confs["site"]
+            # repeat the splitting
+            m.train_test_split(test_idx=test_idx) 
+        
         cb = CounterBalance(oversample, random_state=random_state, debug=debug)
         pipe.steps.insert(-1, ("conf_corr_cb", cb))
         conf_corr_params.update({"conf_corr_cb__groups": m.confs["group"]})
         # when output is not the label 'y', still perform counterbalancing across the label 'y'
-        if (o in confs): conf_corr_params.update({"conf_corr_cb__cb_by": m.y}) 
+        # because we care about the effect of 'c' 
+        if (out in confs): conf_corr_params.update({"conf_corr_cb__cb_by": m.y}) 
         # calculate info about how CB changes the training sample size
         n_samples_cc = len(cb._get_cb_sampled_idxs(groups=m.confs["group"], cb_by=m.y)) 
         
     # 2) Confound Regression
-    elif (conf_ctrl_tech in ["cr"]) and (i == "X"):
+    elif (conf_ctrl_tech in ["cr"]) and (inp == "X"):
         cr = ConfoundRegressorCategoricalX(debug=debug)
         pipe.steps.insert(-1, ("conf_corr_cr", cr))
         conf_corr_params.update({"conf_corr_cr__groups": m.confs["group"]})
         
     ### <END> Special conditions for each conf_ctrl_conf_ctrl_tech
 
-    if (i in confs): m.change_input_to_conf(i, onehot=True) # todo: onehot is hardcoded as confounds are rn categorical
-    if (o in confs): m.change_output_to_conf(o)
+    if (inp in confs): m.change_input_to_conf(inp, onehot=True) # todo: onehot is hardcoded as confounds are assumed as categorical
+    if (out in confs): m.change_output_to_conf(out)
     
     # run pbcc only for X-y
-    if ((i in confs) or (o in confs)): 
+    if ((inp in confs) or (out in confs)): 
         run_pbcc=False
     
     # run permutation for other than X-y experiments?
-    if permute_only_xy and ((i in confs) or (o in confs)):
+    if permute_only_xy and ((inp in confs) or (out in confs)):
         n_permutes_per_trial = 0
         
     # Run the actual classification pipeline including the hyperparameter tuning
@@ -213,16 +226,16 @@ def conf_corr_run(h5_file,
     
     # prepare results
     result = {
-        "io" : "{}-{}".format(i,o),
+        "io" : "{}-{}".format(inp,out),
         "technique" : conf_ctrl_tech,
         "model" : model_name,
         "trial" : trial,
         "n_samples":(m.n_samples_tv + m.n_samples_test),
         "n_samples_cc":(n_samples_cc + m.n_samples_test),
-        "i" : i,
-        "o" : o,
-        "i_is_conf" : (i in confs),
-        "o_is_conf" : (o in confs),
+        "i" : inp,
+        "o" : out,
+        "i_is_conf" : (inp in confs),
+        "o_is_conf" : (out in confs),
     }
     # Append results
     result.update(run)    
@@ -279,7 +292,7 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
             if RUN_CONFS:
                 # skip confound-based analysis if not explicitly requested
                 io_combinations.extend([(c , y) for c in conf_names]) # Same analysis approach
-                io_combinations.extend([("X", c) for c in conf_names]) # Same analysis approach         
+                io_combinations.extend([("X", c) for c in conf_names]) # Snoek et al.        
             
             # generate all setting combinations of (1) CONF_CTRL_TECHS, (2) INPUT_OUTPUT combination,
             # (3) MODEL, and (4) N_OUTER_CV trials so that they can be run in parallel
@@ -294,17 +307,19 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
                             test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], groups=data['site'])]
                         else:
                             splitter = StratifiedKFold(n_splits=N_OUTER_CV, shuffle=True, random_state=0)
-                            test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], y=labels[y])] # dd: not performing stratify_by_conf='group' cuz stratification compromises the testset purity as the labels of the testset affects the data splitting and reduces variance in data      
-                        conf_run_names = conf_names 
-                        if conf_ctrl_tech=='baseline-cb': conf_run_names = ['sex', 'site'] # if 'baseline-cb' then control only for 'sex' and 'site' not for any additional variable/s given                           
-                            
+                            test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], y=labels[y])] # dd: not performing stratify_by_conf='group' cuz stratification compromises the testset purity as the labels of the testset affects the data splitting and reduces variance in data                                  
                         for trial in range(N_OUTER_CV):
-                            settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": conf_run_names,
+                            settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": conf_names,
                                               "io":io, "model_pipegrid":model_pipegrid, 
                                               "trial":trial, 
                                               "test_idx":test_idxs[trial]}]) 
-            print(f"running a total of {len(settings)} different settings of [confound_control, input-output, ML-model, out_cv_trial]")
-
+            print(f"running {len(settings)} different settings of [confound_control, input-output, ML-model, out_cv_trial]")
+            if DEBUG: 
+                for i, setting in enumerate(settings):
+                    setting_to_print = copy(setting)
+                    setting_to_print.pop('test_idx', None)
+                    setting_to_print["model_pipegrid"] = setting_to_print["model_pipegrid"][0].steps[-1][0].replace("model_", "")    
+                    print("({}) \t {}".format(i, setting_to_print))
             # runs the experiments with each parameter combination in parallel and save the results in run_y_i.csv
             parallel(delayed(
                         conf_corr_run)(

@@ -242,7 +242,7 @@ class Imagen:
         
         # save the labelname in file name (also append binarizing rules to the final filename)
         if y_colname not in self.hdf5_name_y:
-            self.hdf5_name_y += y_colname + namesuffix + "-"
+            self.hdf5_name_y += y_colname + namesuffix
         
         return self.df_out
             
@@ -321,7 +321,7 @@ class Imagen:
             self.hdf5_name_x += z_info
             
         filename = "{}_{}_n{}".format(self.hdf5_name_x, 
-                                        self.hdf5_name_y[:-1],
+                                        self.hdf5_name_y,
                                         len(self.df_out))
         dest = join(self.DATA_DIR, "h5files", slugify(filename)+".h5")      
         # if file already exists, then print error and exit
