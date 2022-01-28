@@ -39,8 +39,10 @@ DATA_DIR = "/ritter/share/data/IMAGEN"
 N_OUTER_CV = 7 # number of folds in inner crossvalidation for test score estimation
 N_INNER_CV = 5 # number of folds in inner crossvalidation used for hyperparameter tuning
 ## Optional runs
-RUN_CONFS = True ####
 CONF_CTRL_TECHS = ["baseline-cb", "cb"] # choose from ["baseline", "cb", "cr", "loso"]  ####
+RUN_CONFS = True ####
+EXCLUDE_IN_RUN_CONFS = ['sex', 'site'] #### 'sex', 'site'
+
 SAVE_MODELS = False # saves the final trained models but only for io=={X-y} and conf_ctrl_tech=='CB' ####
 RUN_PBCC = False # run the prediction-based post-prediction conf_ctrl_tech by Dinga et al. 2020
 RUN_CHI_SQUARE = False # runs a chi-square analysis between the label and all the confounds (todo: only supports categorical confounds)
@@ -49,7 +51,7 @@ RUN_CHI_SQUARE = False # runs a chi-square analysis between the label and all th
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
 N_PERMUTATIONS = 0
 PERMUTE_ONLY_XY = True
-N_JOBS = 5 # parallel jobs
+N_JOBS = 2 # parallel jobs ####
 PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
 DEBUG = False ####
@@ -108,8 +110,8 @@ MODEL_PIPEGRIDS = [
 # Here you can select which HDF5 files you want to include in analysis. 
 H5_FILES = [  ####
 ### main
-'/ritter/share/data/IMAGEN/h5files/posthoc-cc-ctq-denial-sum-n650.h5',
-'/ritter/share/data/IMAGEN/h5files/posthoc-cc-pss-pss-total-n650.h5',
+# '/ritter/share/data/IMAGEN/h5files/posthoc-cc-ctq-denial-sum-n650.h5',
+'/ritter/share/data/IMAGEN/h5files/posthoc-cc-ctq-denial-su-n650.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-freq-audit-quick-n614.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-total-audit-n687.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit2-amount-n567.h5',
@@ -290,9 +292,10 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
             # prepare the "io"
             io_combinations = [("X", y)]
             if RUN_CONFS:
+                EXCLUDE_IN_RUN_CONFS = [c.lower() for c in EXCLUDE_IN_RUN_CONFS]
                 # skip confound-based analysis if not explicitly requested
-                io_combinations.extend([(c , y) for c in conf_names]) # Same analysis approach
-                io_combinations.extend([("X", c) for c in conf_names]) # Snoek et al.        
+                io_combinations.extend([(c , y) for c in conf_names if c.lower() not in EXCLUDE_IN_RUN_CONFS]) # Same analysis approach
+                io_combinations.extend([("X", c) for c in conf_names if c.lower() not in EXCLUDE_IN_RUN_CONFS]) # Snoek et al.        
             
             # generate all setting combinations of (1) CONF_CTRL_TECHS, (2) INPUT_OUTPUT combination,
             # (3) MODEL, and (4) N_OUTER_CV trials so that they can be run in parallel
