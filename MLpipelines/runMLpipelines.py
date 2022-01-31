@@ -34,7 +34,7 @@ from MLpipeline import *
 from confounds import *
 
 # Define settings for the experiment 
-DATA_DIR = "/ritter/share/data/IMAGEN"
+DATA_DIR = "/ritter/share/data/IMAGEN/"
 ## CV loops
 N_OUTER_CV = 7 # number of folds in inner crossvalidation for test score estimation
 N_INNER_CV = 5 # number of folds in inner crossvalidation used for hyperparameter tuning
@@ -54,7 +54,7 @@ PERMUTE_ONLY_XY = True
 N_JOBS = 2 # parallel jobs ####
 PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
-DEBUG = False ####
+DEBUG = True ####
     
 if DEBUG:
     N_OUTER_CV = 2
@@ -65,7 +65,7 @@ if DEBUG:
     PARALLELIZE = False
         
 # The ML pipelines to run and their corresponding hyperparameter grids as tuples i.e. (pipeline, grid)
-MODEL_PIPEGRIDS = [
+ML_MODELS = [
     ( # (pipeline, grid) for Logistic Regression classifier
         Pipeline([
             ("varth", VarianceThreshold()), 
@@ -111,7 +111,7 @@ MODEL_PIPEGRIDS = [
 H5_FILES = [  ####
 ### main
 # '/ritter/share/data/IMAGEN/h5files/posthoc-cc-ctq-denial-sum-n650.h5',
-'/ritter/share/data/IMAGEN/h5files/posthoc-cc-ctq-denial-su-n650.h5',
+    DATA_DIR + 'h5files/posthoc-cc-pss-pss-tota-n650.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-freq-audit-quick-n614.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit-total-audit-n687.h5',
 #  '/ritter/share/data/IMAGEN/h5files/newlbls-clean-bl-audit-fu3-audit2-amount-n567.h5',
@@ -256,28 +256,36 @@ def conf_corr_run(h5_file,
         
 #########################################################################################################################
 
-def main():
-    # The total number of permutations that are run per trial
-    N_PERMUTES_PER_TRIAL = N_PERMUTATIONS//N_OUTER_CV
+def runMLpipelines(
+            h5_files, ML_models, 
+            n_outer_cv=5, n_inner_cv=5, 
+            conf_ctrl_techs=['baseline'], run_confs=False, exclude_in_run_confs=[],
+            n_jobs=1, parallelize=False, 
+            n_permutations=0, permute_only_xy=True,
+            save_models=False, debug=False, 
+            run_chi_square=False, run_pbcc=False):
     
-    with Parallel(n_jobs=N_JOBS) as parallel:
+    # The total number of permutations that are run per trial
+    n_permutes_per_trial = n_permutations//n_outer_cv
+    
+    with Parallel(n_jobs=n_jobs) as parallel:
         
-        for h5_file in H5_FILES:
+        for h5_file in h5_files:
 
             print("========================================")
             print("Running MLpipeline on file:\n", h5_file)
             start_time = datetime.now()
             print("time: ", start_time)
             # Create the folder in which to save the results
-            if DEBUG: 
+            if debug: 
                 os.system("rm -rf results/debug_run 2> /dev/null")
-                SAVE_DIR = "results/debug_run/{}".format(
+                save_dir = "results/debug_run/{}".format(
                 start_time.strftime("%Y%m%d-%H%M"))
             else:
-                SAVE_DIR = "results/{}/{}".format(
+                save_dir = "results/{}/{}".format(
                     os.path.basename(h5_file).replace(".h5",""),
                     start_time.strftime("%Y%m%d-%H%M"))
-            if not os.path.isdir(SAVE_DIR): os.makedirs(SAVE_DIR)
+            if not os.path.isdir(save_dir): os.makedirs(save_dir)
             
             # load the data.h5 file
             data = h5py.File(h5_file, "r")
@@ -291,33 +299,33 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
             y = label_names[0]
             # prepare the "io"
             io_combinations = [("X", y)]
-            if RUN_CONFS:
-                EXCLUDE_IN_RUN_CONFS = [c.lower() for c in EXCLUDE_IN_RUN_CONFS]
+            if run_confs:
+                exclude_in_run_confs = [c.lower() for c in exclude_in_run_confs]
                 # skip confound-based analysis if not explicitly requested
-                io_combinations.extend([(c , y) for c in conf_names if c.lower() not in EXCLUDE_IN_RUN_CONFS]) # Same analysis approach
-                io_combinations.extend([("X", c) for c in conf_names if c.lower() not in EXCLUDE_IN_RUN_CONFS]) # Snoek et al.        
+                io_combinations.extend([(c , y) for c in conf_names if c.lower() not in exclude_in_run_confs]) # Same analysis approach
+                io_combinations.extend([("X", c) for c in conf_names if c.lower() not in exclude_in_run_confs]) # Snoek et al.        
             
-            # generate all setting combinations of (1) CONF_CTRL_TECHS, (2) INPUT_OUTPUT combination,
-            # (3) MODEL, and (4) N_OUTER_CV trials so that they can be run in parallel
+            # generate all setting combinations of (1) conf_ctrl_techs, (2) INPUT_OUTPUT combination,
+            # (3) MODEL, and (4) n_outer_cv trials so that they can be run in parallel
             settings = []
-            for conf_ctrl_tech in CONF_CTRL_TECHS:
+            for conf_ctrl_tech in conf_ctrl_techs:
                 for io in io_combinations:
-                    for model_pipegrid in MODEL_PIPEGRIDS: # pipe=model_pipeline, grid=hyperparameters
+                    for ML_model in ML_models: # pipe=model_pipeline, grid=hyperparameters
                         # pre-generate the test indicies for the outer CV as they need to run in parallel
                         if conf_ctrl_tech == "loso":
                             splitter = LeaveOneGroupOut()
                             assert splitter.get_n_splits(groups=data['site']) in [7,8]
                             test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], groups=data['site'])]
                         else:
-                            splitter = StratifiedKFold(n_splits=N_OUTER_CV, shuffle=True, random_state=0)
+                            splitter = StratifiedKFold(n_splits=n_outer_cv, shuffle=True, random_state=0)
                             test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], y=labels[y])] # dd: not performing stratify_by_conf='group' cuz stratification compromises the testset purity as the labels of the testset affects the data splitting and reduces variance in data                                  
-                        for trial in range(N_OUTER_CV):
+                        for trial in range(n_outer_cv):
                             settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": conf_names,
-                                              "io":io, "model_pipegrid":model_pipegrid, 
+                                              "io":io, "model_pipegrid":ML_model, 
                                               "trial":trial, 
                                               "test_idx":test_idxs[trial]}]) 
             print(f"running {len(settings)} different settings of [confound_control, input-output, ML-model, out_cv_trial]")
-            if DEBUG: 
+            if debug: 
                 for i, setting in enumerate(settings):
                     setting_to_print = copy(setting)
                     setting_to_print.pop('test_idx', None)
@@ -328,25 +336,25 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
                         conf_corr_run)(
                                     h5_file=h5_file, **setting,
                                     label_name=y, 
-                                    save_dir=SAVE_DIR, n_inner_cv=N_INNER_CV, run_pbcc=RUN_PBCC,
-                                    parallelize=PARALLELIZE, n_permutes_per_trial=N_PERMUTES_PER_TRIAL,
-                                    permute_only_xy=PERMUTE_ONLY_XY, 
-                                    save_models=SAVE_MODELS, debug=DEBUG, random_state=random_state) 
+                                    save_dir=save_dir, n_inner_cv=n_inner_cv, run_pbcc=run_pbcc,
+                                    parallelize=parallelize, n_permutes_per_trial=n_permutes_per_trial,
+                                    permute_only_xy=permute_only_xy, 
+                                    save_models=save_models, debug=debug, random_state=random_state) 
                      for random_state, setting in enumerate(settings))
 
             # stitch together the csv results that were generated in parallel and save in a single csv file        
-            df = pd.concat([pd.read_csv(csv) for csv in glob(SAVE_DIR+"/run_*.csv")], ignore_index=True)
+            df = pd.concat([pd.read_csv(csv) for csv in glob(save_dir+"/run_*.csv")], ignore_index=True)
             df = df.loc[:, ~df.columns.str.contains('^Unnamed')] # drop unnamed columns            
             df = df.sort_values(["io","technique", "model", "trial"]) # sort
-            df.to_csv(join(SAVE_DIR, "run.csv"), index=False)
+            df.to_csv(join(save_dir, "run.csv"), index=False)
 
             # delete the temp csv files generated in parallel
-            os.system(f"rm {SAVE_DIR}/run_*.csv")                         
+            os.system(f"rm {save_dir}/run_*.csv")                         
                     
             # calculate the chi-square statistics between confounds and label if requested
-            if RUN_CHI_SQUARE and conf_names:
+            if run_chi_square and conf_names:
                 run = run_chi_sq(data, label_names, conf_names)
-                run.to_csv(join(SAVE_DIR, "chi-square.csv"), index=False)                
+                run.to_csv(join(save_dir, "chi-square.csv"), index=False)                
 
             data.close()
             
@@ -354,5 +362,11 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
             print("TOTAL RUNTIME: {} secs".format(runtime))
 
 #########################################################################################################################
-if __name__ == "__main__": main()
+if __name__ == "__main__": 
+    runMLpipelines(
+            h5_files=H5_FILES, ML_models=ML_MODELS,
+            n_outer_cv=N_OUTER_CV, n_inner_cv=N_INNER_CV,
+            conf_ctrl_techs=CONF_CTRL_TECHS,  run_confs=RUN_CONFS,  exclude_in_run_confs= EXCLUDE_IN_RUN_CONFS,
+            n_jobs=N_JOBS,  parallelize=PARALLELIZE, n_permutations=N_PERMUTATIONS,  permute_only_xy=PERMUTE_ONLY_XY, 
+            save_models=SAVE_MODELS,  debug=DEBUG, run_chi_square=RUN_CHI_SQUARE,  run_pbcc=RUN_PBCC)
    
