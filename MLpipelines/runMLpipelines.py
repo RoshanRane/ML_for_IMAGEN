@@ -250,7 +250,7 @@ def conf_corr_run(h5_file,
     df.to_csv(join(save_dir, f"run_{label_name}_{random_state}.csv" ))
     
     # save models only for X-y experiments with conf_ctrl_tech == CounterBalance
-    if save_models and (i not in confs) and (o not in confs) and (conf_ctrl_tech!="baseline"):
+    if save_models and (inp not in confs) and (out not in confs) and (conf_ctrl_tech!="baseline"):
         dump(m.estimator, join(save_dir, f"{model_name}_{conf_ctrl_tech}_{trial}.model"))
         
         
