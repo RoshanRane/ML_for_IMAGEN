@@ -197,9 +197,8 @@ class Imagen:
         to self.prepare_X() and self.save_h5()            
         '''                    
         dfq = dfq.set_index("ID")
-        # set NaN values also as class 0: following instructions in page5 of doc: https://imagen-europe.com/wp-content/uploads/sites/234/2020/11/SOP_Annex_IMAGEN_FU3_v8_.pdf
-        dfq = dfq.fillna(-1)
-
+#         # TODO: set NaN values also as class 0: following instructions in page5 of doc: https://imagen-europe.com/wp-content/uploads/sites/234/2020/11/SOP_Annex_IMAGEN_FU3_v8_.pdf
+#         dfq = dfq.fillna(-1)
         self.df_out.loc[:,y_colname] = dfq.loc[:,col]
         
         # plot distribution of the questionnaire's values
@@ -217,10 +216,10 @@ class Imagen:
             self.df_out[y_colname] = np.nan # reset values to add binary values
             
             if isinstance(class0, int):
-                self.df_out.loc[(q<=class0)|(q==-1), y_colname] = 0 # -1 is class 0
+                self.df_out.loc[q<=class0, y_colname] = 0 # self.df_out.loc[(q<=class0)|(q==-1), y_colname] = 0 # -1 is class 0
                 namesuffix += "l{}".format(class0)
             elif isinstance(class0, list):
-                self.df_out.loc[q.isin(class0+[-1]), y_colname] = 0 # -1 is class 0
+                self.df_out.loc[q.isin(class0), y_colname] = 0 # self.df_out.loc[q.isin(class0+[-1]), y_colname] = 0 # -1 is class 0
                 namesuffix += "l{}".format("".join([str(y) for y in class0]))
             else:
                 print("[ERROR] binarizing failed. Incoherent values given for class0=", class0) 

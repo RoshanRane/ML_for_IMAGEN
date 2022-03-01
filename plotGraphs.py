@@ -12,7 +12,7 @@ from collections import Counter
 import seaborn as sns
 
 def plotGraph(df, cat, plt_type='bar', 
-              dropna = False, figsize = (6,4), title=None, ax=None,
+              dropna=False, figsize=(6,4), title=None, ax=None,
               bins=10, print_bar_count=True): 
     '''
     Plots a graph of type defined in 'plt_type' on the data in the column given by 'cat'.
@@ -30,51 +30,51 @@ def plotGraph(df, cat, plt_type='bar',
         description = cat.split(" Index")[0]
         ax.set_title(description)
     
+    data = df[cat]
+    # if nans in the df then replace
     if(dropna): 
-        filtered_df = df[cat].dropna()
-        filtered_df = filtered_df[filtered_df != 'NaN']
-    # if no nans in the df then don't do anything
-    elif(df[cat].isnull().values.any()):
-        filtered_df = df[cat]
+        data = data.dropna()
+        data = data[(data!='NaN') or (data!="missing")]
     else:
-        filtered_df = df[cat].fillna('no-data')
+        if data.dtype.name=='category' and "missing" not in data.cat.categories: 
+            data.cat.add_categories("missing")
+        data = data.fillna('missing')
     
     # histogram and density plots
     if (plt_type == 'hist+density'):
-        filtered_df.plot.hist(grid = True, alpha=0.7, density =True, bins=bins, ax=ax)
-        filtered_df.plot.density(legend = True)
-        ax.set_ylabel("density of test subjects")
+        data.plot.hist(grid = True, alpha=0.7, density=True, normed=True, bins=bins, ax=ax)
+        data.plot.density(legend=True)
+        ax.set_ylabel("density of subjects")
         
     # only histogram plots
     elif (plt_type == 'hist'):
-        filtered_df.plot.hist(grid = True, alpha=0.7, legend = True, bins=bins, ax=ax)
-        ax.set_ylabel("number of test subjects")
-        ax.set_xlim(0,int(bins))
-        
-    # pie-chart plots
+        data.plot.hist(grid=True, alpha=0.7, bins=bins, ax=ax)
+        ax.set_ylabel("number of subjects")
+
+         # pie-chart plots
     elif (plt_type == 'pie'):            
-        val = dict(filtered_df.astype('str').value_counts())
-        ax.pie(list(val.values()), labels = list(val.keys()), autopct='%1.1f%%', shadow=True, startangle=90) 
+        val = dict(data.astype('str').value_counts())
+        ax.pie(list(val.values()), labels = list(val.keys()), autopct='%1.1f%%', shadow=True, startangle=270) 
         ax.axis('equal')
         
     # bar plot
     elif (plt_type == 'bar'): 
-        filtered_df.value_counts(dropna=dropna).sort_index().plot.bar(sort_columns=True, grid=True, rot=90, ax=ax,  width=0.9)
+        data.value_counts(dropna=dropna).sort_index().plot.bar(sort_columns=True, grid=True, rot=75, ax=ax,  width=0.9)
         if print_bar_count:
-            x_texts = list(filtered_df.value_counts().sort_index())
+            x_texts = list(data.value_counts().sort_index())
             for i, x in enumerate(x_texts):
                 ax.text( i , x+(x/100)+1 , str(x))
-        ax.set_ylabel("number of test subjects")
+        ax.set_ylabel("number of subjects")
         
     # barh plot
     elif (plt_type == 'barh'): 
-        filtered_df.value_counts(dropna=dropna).sort_index().plot.barh(ax=ax, width=0.9)
+        data.value_counts(dropna=dropna).sort_index().plot.barh(ax=ax, width=0.9)
         
         if print_bar_count:
-            y_texts = list(filtered_df.value_counts().sort_index())
+            y_texts = list(data.value_counts().sort_index())
             for i, y in enumerate(y_texts):
                 ax.text(y+(y/100), i, str(y))
-        ax.set_xlabel("number of test subjects")
+        ax.set_xlabel("number of subjects")
     
     else:
         raise ValueError("Invalid value for plt_type. It can be one of 'hist+density', 'hist', 'pie', 'bar', barh") 
