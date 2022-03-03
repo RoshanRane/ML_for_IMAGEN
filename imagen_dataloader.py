@@ -520,3 +520,12 @@ def abline(ax, slope, intercept, color=None):
     ax.plot(x_vals, y_vals, color=color, alpha=0.1
             , scalex=False, scaley=False, linewidth=2)
     
+    
+    
+def show_h5_content(h5filename):
+    h5file = h5py.File(h5filename, "r")
+    print(h5filename)
+    print('keys in h5:', h5file.keys())
+    print('n(subs) = {} \t n(X-features) = {}'.format(len(h5file['i']), len(h5file.attrs['X_col_names'])))
+    print('confs = ',h5file.attrs['confs'])
+    h5file.close()
