@@ -41,7 +41,7 @@ import warnings
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
-sys.path.insert(1, '../MLpipelines/')
+sys.path.insert(1, parentdir+'/MLpipelines/')
 from plotResults import *
 from imagen_dataloader import *
 
