@@ -37,8 +37,11 @@ from MLpipeline import *
 from confounds import *
 
 ###### permutate confounds (other than 'sex', 'site') with random binary values
-PERMUTE_CONFS = 2 # how many random confs to use at once?
+PERMUTE_CONFS = 0 # how many random confs to use at once?
 PERMUTE_CONFS_N = 100 # how many permutated confounds to repeat for?
+EXCLUDE_SEX_SITE = False
+
+BINARIZE_ALL_EXPERIMENT = True
 
 # Define settings for the experiment 
 DATA_DIR = "/ritter/share/data/IMAGEN/"
@@ -70,6 +73,7 @@ if DEBUG:
         N_PERMUTATIONS = 2
     N_JOBS = 1 
     PARALLELIZE = False
+    if PERMUTE_CONFS_N>10: PERMUTE_CONFS_N=10
         
 # The ML pipelines to run and their corresponding hyperparameter grids as tuples i.e. (pipeline, grid)
 ML_MODELS = [
@@ -116,7 +120,9 @@ ML_MODELS = [
 
 # Here you can select which HDF5 files you want to include in analysis. 
 H5_FILES = [
-    "h5_permuted_confs/permutedconfs10000-newlbls-clean-fu3-espad-fu3-19a-binge-n650.h5",
+    "/ritter/share/data/IMAGEN/h5files/posthoc-cc-fu3-espad-alc-8b-binarize-all-n650.h5",
+    "/ritter/share/data/IMAGEN/h5files/posthoc-cc-fu3-pss-pss-total-binarize-all-n650.h5"
+    # "h5_permuted_confs/permutedconfs10000-newlbls-clean-fu3-espad-fu3-19a-binge-n650.h5",
     # "h5_permuted_confs/permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-n620.h5",
     # "h5_permuted_confs/permutedconfs10000-newlbls-clean-fu2-espad-fu3-19a-binge-n634.h5",
     ]
@@ -215,6 +221,7 @@ def conf_corr_run(h5_file,
         "o" : out,
         "i_is_conf" : (inp in confs),
         "o_is_conf" : (out in confs),
+        'confs': list(confs),
     }
     # Append results
     result.update(run)    
@@ -254,15 +261,23 @@ def runMLpipelines(
             start_time = datetime.now()
             print("time: ", start_time)
             # Create the folder in which to save the results
+            timepoint = os.path.basename(h5_file).split('clean-')[-1].split('-')[0]
             if debug: 
                 os.system("rm -rf results/debug_run 2> /dev/null")
                 save_dir = "results/debug_run/{}".format(
                 start_time.strftime("%Y%m%d-%H%M"))
+            elif BINARIZE_ALL_EXPERIMENT: 
+                    save_dir = "results/binarizeall-{}-{}/{}".format(
+                    os.path.basename(h5_file).replace(".h5",""),
+                    timepoint,
+                    start_time.strftime("%Y%m%d-%H%M"))
             else:
                 save_dir = "results/permuteconfs-{}x{}-{}/{}".format(
                     PERMUTE_CONFS, PERMUTE_CONFS_N,
-                    os.path.basename(h5_file).replace(".h5",""),
+                    timepoint,
                     start_time.strftime("%Y%m%d-%H%M"))
+                if EXCLUDE_SEX_SITE: save_dir = save_dir.replace(timepoint, timepoint+'-excludingsexsite')
+                    
             if not os.path.isdir(save_dir): os.makedirs(save_dir)
             
             # load the data.h5 file
@@ -305,11 +320,29 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
                             for permute_cc_i in range(PERMUTE_CONFS_N):
                                 dummy_confs = [f"dummy_{i}" for i in random_confs[permute_cc_i]]
                                 
+                                if EXCLUDE_SEX_SITE:
+                                    final_confs = dummy_confs
+                                else:
+                                    final_confs = conf_names+dummy_confs
+                                    
+                                
                                 for trial in range(n_outer_cv):
-                                    settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": conf_names+dummy_confs,
+                                    settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": final_confs,
                                                       "io":io, "model_pipegrid":ML_model, 
                                                       "trial":trial, 
                                                       "test_idx":test_idxs[trial]}]) 
+                                    
+                        elif BINARIZE_ALL_EXPERIMENT:
+                            final_confs = ['sex', 'site']
+                            for conf_name in conf_names: 
+                                if conf_name not in final_confs:
+                                    
+                                    for trial in range(n_outer_cv):
+                                        settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": final_confs+[conf_name],
+                                                          "io":io, "model_pipegrid":ML_model, 
+                                                          "trial":trial, 
+                                                          "test_idx":test_idxs[trial]}]) 
+                                    
                     print(f"running {len(settings)} different settings of [confound_control, input-output, ML-model, out_cv_trial]")
             if debug: 
                 for i, setting in enumerate(settings):
