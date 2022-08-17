@@ -37,14 +37,15 @@ from MLpipeline import *
 from confounds import *
 
 ###### permutate confounds (other than 'sex', 'site') with random binary values
-PERMUTE_CONFS = 0 # how many random confs to use at once?
-PERMUTE_CONFS_N = 100 # how many permutated confounds to repeat for?
+PERMUTE_CONFS = 1 # how many random confs to use at once?
+PERMUTE_CONFS_N = 500 # how many permutated confounds to repeat for?
 EXCLUDE_SEX_SITE = False
 
-BINARIZE_ALL_EXPERIMENT = True
+BINARIZE_ALL_EXPERIMENT = False # CURRENTLY NOT SUPPORTED
 
 # Define settings for the experiment 
 DATA_DIR = "/ritter/share/data/IMAGEN/"
+OUT_DIR = "../post_hoc_milena/"
 ## CV loops
 N_OUTER_CV = 7 # number of folds in inner crossvalidation for test score estimation
 N_INNER_CV = 5 # number of folds in inner crossvalidation used for hyperparameter tuning
@@ -61,7 +62,7 @@ RUN_CHI_SQUARE = False # runs a chi-square analysis between the label and all th
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
 N_PERMUTATIONS = 0
 PERMUTE_ONLY_XY = True
-N_JOBS = 5 # parallel jobs ####
+N_JOBS = 10 # parallel jobs ####
 PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
 DEBUG = False ####
@@ -120,11 +121,13 @@ ML_MODELS = [
 
 # Here you can select which HDF5 files you want to include in analysis. 
 H5_FILES = [
-    "/ritter/share/data/IMAGEN/h5files/posthoc-cc-fu3-espad-alc-8b-binarize-all-n650.h5",
-    "/ritter/share/data/IMAGEN/h5files/posthoc-cc-fu3-pss-pss-total-binarize-all-n650.h5"
-    # "h5_permuted_confs/permutedconfs10000-newlbls-clean-fu3-espad-fu3-19a-binge-n650.h5",
-    # "h5_permuted_confs/permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-n620.h5",
-    # "h5_permuted_confs/permutedconfs10000-newlbls-clean-fu2-espad-fu3-19a-binge-n634.h5",
+    # "/ritter/share/data/IMAGEN/h5files/posthoc-cc-fu3-espad-alc-8b-binarize-all-n650.h5",
+    # "/ritter/share/data/IMAGEN/h5files/posthoc-cc-fu3-pss-pss-total-binarize-all-n650.h5"
+    # ("fu3","h5_permuted_confs/permutedconfs10000-newlbls-clean-fu3-espad-fu3-19a-binge-n650.h5",
+    # ("fu2","h5_permuted_confs/permutedconfs10000-newlbls-clean-fu2-espad-fu3-19a-binge-n634.h5",
+    ("bl","../post_hoc_milena/h5_permuted_confs/permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-n620.h5"),
+    # ("blcausal1", "../post_hoc_milena/h5_permuted_confs/permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-causal-onset1-n565.h5"),
+    # ("blcausal0","../post_hoc_milena/h5_permuted_confs/permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-causal-onset0-n477.h5"),
     ]
     
 def conf_corr_run(h5_file, 
@@ -254,29 +257,28 @@ def runMLpipelines(
     
     with Parallel(n_jobs=n_jobs) as parallel:
         
-        for h5_file in h5_files:
-
+        for h5_name, h5_file in h5_files:
+    
             print("========================================")
-            print("Running MLpipeline confoound permutations on file:\n", h5_file)
+            print(f"Running MLpipeline confound permutations for {h5_name} with file:\n", h5_file)
             start_time = datetime.now()
             print("time: ", start_time)
-            # Create the folder in which to save the results
-            timepoint = os.path.basename(h5_file).split('clean-')[-1].split('-')[0]
             if debug: 
                 os.system("rm -rf results/debug_run 2> /dev/null")
-                save_dir = "results/debug_run/{}".format(
+                save_dir = "{}/results/debug_run/{}".format(
+                OUT_DIR,
                 start_time.strftime("%Y%m%d-%H%M"))
             elif BINARIZE_ALL_EXPERIMENT: 
-                    save_dir = "results/binarizeall-{}-{}/{}".format(
-                    os.path.basename(h5_file).replace(".h5",""),
-                    timepoint,
+                    save_dir = "{}/results/binarizeall-{}-{}/{}".format(
+                    OUT_DIR,
+                    os.path.basename(h5_file).replace(".h5",""), h5_name,
                     start_time.strftime("%Y%m%d-%H%M"))
             else:
-                save_dir = "results/permuteconfs-{}x{}-{}/{}".format(
-                    PERMUTE_CONFS, PERMUTE_CONFS_N,
-                    timepoint,
+                save_dir = "{}/results/permuteconfs-{}x{}-{}/{}".format(
+                    OUT_DIR,
+                    PERMUTE_CONFS, PERMUTE_CONFS_N, h5_name,
                     start_time.strftime("%Y%m%d-%H%M"))
-                if EXCLUDE_SEX_SITE: save_dir = save_dir.replace(timepoint, timepoint+'-excludingsexsite')
+                if EXCLUDE_SEX_SITE: save_dir = save_dir.replace(h5_name, h5_name+'-excludingsexsite')
                     
             if not os.path.isdir(save_dir): os.makedirs(save_dir)
             
@@ -302,48 +304,51 @@ in imagen_ml repository since the commit 7f5b67e95d605f3218d96199c07e914589a9a58
             # generate all setting combinations of (1) conf_ctrl_techs, (2) INPUT_OUTPUT combination,
             # (3) MODEL, and (4) n_outer_cv trials so that they can be run in parallel
             settings = []
-            for conf_ctrl_tech in conf_ctrl_techs:
-                for io in io_combinations:
-                    for ML_model in ML_models: # pipe=model_pipeline, grid=hyperparameters
-                        # pre-generate the test indicies for the outer CV as they need to run in parallel
-                        if conf_ctrl_tech == "loso":
-                            splitter = LeaveOneGroupOut()
-                            assert splitter.get_n_splits(groups=data['site']) in [7,8]
-                            test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], groups=data['site'])]
-                        else:
-                            splitter = StratifiedKFold(n_splits=n_outer_cv, shuffle=True, random_state=0)
-                            test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], y=labels[y])] # dd: not performing stratify_by_conf='group' cuz stratification compromises the testset purity as the labels of the testset affects the data splitting and reduces variance in data
-                        if PERMUTE_CONFS:
-                            # np.random.seed(42)
-                            random_confs = np.random.choice(np.arange(10000), size=(PERMUTE_CONFS_N, PERMUTE_CONFS), replace=False)
-                            
-                            for permute_cc_i in range(PERMUTE_CONFS_N):
-                                dummy_confs = [f"dummy_{i}" for i in random_confs[permute_cc_i]]
-                                
-                                if EXCLUDE_SEX_SITE:
-                                    final_confs = dummy_confs
-                                else:
-                                    final_confs = conf_names+dummy_confs
-                                    
-                                
+            
+            # if PERMUTE_CONFS:
+                # np.random.seed(42)
+            random_confs = np.random.choice(np.arange(10000), 
+                                            size=(PERMUTE_CONFS_N, PERMUTE_CONFS), 
+                                            replace=False)
+            ### @here choose PERMUTE_CONFS_N random confs at once
+            for permute_cc_i in range(PERMUTE_CONFS_N):
+                dummy_confs = [f"dummy_{i}" for i in random_confs[permute_cc_i]]
+
+                if EXCLUDE_SEX_SITE:
+                    final_confs = dummy_confs
+                else:
+                    final_confs = conf_names+dummy_confs
+
+                for conf_ctrl_tech in conf_ctrl_techs:
+                    for io in io_combinations:
+                        for ML_model in ML_models: # pipe=model_pipeline, grid=hyperparameters
+                            # pre-generate the test indicies for the outer CV as they need to run in parallel
+                            if conf_ctrl_tech == "loso":
+                                splitter = LeaveOneGroupOut()
+                                assert splitter.get_n_splits(groups=data['site']) in [7,8]
+                                test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], groups=data['site'])]
+                            else:
+                                splitter = StratifiedKFold(n_splits=n_outer_cv, shuffle=True, random_state=0)
+                                test_idxs = [test_idx for _,test_idx in splitter.split(data["X"], y=labels[y])] # dd: not performing stratify_by_conf='group' cuz stratification compromises the testset purity as the labels of the testset affects the data splitting and reduces variance in data
+
                                 for trial in range(n_outer_cv):
                                     settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": final_confs,
                                                       "io":io, "model_pipegrid":ML_model, 
                                                       "trial":trial, 
                                                       "test_idx":test_idxs[trial]}]) 
+                            # TODO : Must be adapted into the above for loop to use
+#                         elif BINARIZE_ALL_EXPERIMENT:
+#                             final_confs = ['sex', 'site']
+#                             for conf_name in conf_names: 
+#                                 if conf_name not in final_confs:
                                     
-                        elif BINARIZE_ALL_EXPERIMENT:
-                            final_confs = ['sex', 'site']
-                            for conf_name in conf_names: 
-                                if conf_name not in final_confs:
+#                                     for trial in range(n_outer_cv):
+#                                         settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": final_confs+[conf_name],
+#                                                           "io":io, "model_pipegrid":ML_model, 
+#                                                           "trial":trial, 
+#                                                           "test_idx":test_idxs[trial]}]) 
                                     
-                                    for trial in range(n_outer_cv):
-                                        settings.extend([{"conf_ctrl_tech":conf_ctrl_tech, "confs": final_confs+[conf_name],
-                                                          "io":io, "model_pipegrid":ML_model, 
-                                                          "trial":trial, 
-                                                          "test_idx":test_idxs[trial]}]) 
-                                    
-                    print(f"running {len(settings)} different settings of [confound_control, input-output, ML-model, out_cv_trial]")
+            print(f"running {len(settings)} different settings of [confound_control, input-output, ML-model, out_cv_trial]")
             if debug: 
                 for i, setting in enumerate(settings):
                     setting_to_print = copy(setting)

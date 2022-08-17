@@ -3,7 +3,7 @@ from glob import glob
 from os.path import join, isfile
 import numpy as np
 import pandas as pd
-
+import h5py 
 import time
 from datetime import datetime
 from copy import deepcopy
@@ -13,123 +13,132 @@ from sklearn.metrics import balanced_accuracy_score, roc_auc_score, get_scorer, 
 from joblib import Parallel, delayed, dump, load
 
 # Local imports
+from imblearn.pipeline import Pipeline
 from MLpipeline import *
 from confounds import *
-from slugify import slugify
+# from slugify import slugify
 import warnings
 from tqdm import tqdm
 
+### Import the same model pipelines as used in the explorative stage: runMLpipelines file
+from runMLpipelines import ML_MODELS 
+
 # Define settings for the experiment 
 DATA_DIR = "/ritter/share/data/IMAGEN"
-H5_FILES_PATH = "/ritter/share/data/IMAGEN/h5files"
+H5_DIR = "/ritter/share/data/IMAGEN/h5files/"
     
-# directories of all 3 timepoints
-tp_dirs = ['newlbls-clean-bl-espad-fu3-19a-binge-n620/*/',
-           'newlbls-clean-fu2-espad-fu3-19a-binge-n634/*/', 
-           'newlbls-clean-fu3-espad-fu3-19a-binge-n650/*/'] #todo site# :: 'across_sites/lbls-bl-*'
+# directories with the run results to rerun on holdout data
+PERMUTED_H5_DIR = "/ritter/roshan/workspace/ML_for_IMAGEN/post_hoc_milena/h5_permuted_confs/"
+PERMUTATION_H5 = [
+    # h5cat, training data, holdout data  
+    ("bl",      
+     PERMUTED_H5_DIR+"permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-n620.h5", 
+     H5_DIR+"posthoc-cc2-holdout-h5bl.h5"),
+    ("causal1", 
+     PERMUTED_H5_DIR+"permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-causal-onset1-n565.h5", 
+     H5_DIR+"posthoc-cc2-holdout-h5causal1.h5"),
+    ("causal0", 
+     PERMUTED_H5_DIR+"permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-causal-onset0-n477.h5", 
+     H5_DIR+"posthoc-cc2-holdout-h5causal0.h5"),
+]
 
-HOLDOUT_DIR = "/ritter/share/data/IMAGEN/h5files/newholdout-clean-{}*{}*.h5" #todo site# newholdout:: h5files/holdout-
-SAVE_PATH = "results/holdout-alltp-clean_run.csv" #todo site# #holdout_results :: holdout_results_sites 
+SAVE_PATH = "results/holdout-posthoc-cc2-permuted_run.csv" 
 
-## Permutation tests
+# Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
-N_PERMUTATIONS = 1000
-PERMUTE_ONLY_MODELS = ['SVM-rbf', 'GB']
+N_PERMUTATIONS = 1000 # 1000
+MODEL = 'SVM-rbf' # ['LR','SVM-lin','SVM-rbf','GB']
 PARALLELIZE = True # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
 DEBUG = False
-
-EXTRA_INFERENCE_DIR = False# "/ritter/share/data/IMAGEN/h5files/mediumextras-{}*{}*.h5"
+RAND_STATE=None
 
 if DEBUG:
     if N_PERMUTATIONS > 2: N_PERMUTATIONS = 2
     PARALLELIZE = False
-    tp_dirs=[tp_dirs[0]]
-    EXTRA_INFERENCE_DIR = False
+    RAND_STATE = 108
+    # PERMUTATION_H5 = [PERMUTATION_H5[0]]
     
     
 ##################################################################################################################
 if __name__ == "__main__": 
     
-    warnings.simplefilter("ignore", UserWarning) ## ignore the warning XGB is throwning
-    ##### Load all run.csv files from each dir  #####
-    df_runs = []
-    for i, each_dir in enumerate(tp_dirs):
-        # first, collect all run.csv results together
-        f = glob(f"results/{each_dir}/run.csv")
-        assert len(f)==1, f"multiple result folders found with {each_dir} = {f}"
-        f = f[0]
-        run = pd.read_csv(f)
-        # select only 'cb' controlled results and drop the confound-related rows
-        run = run[~(run.o_is_conf) & ~(run.i_is_conf) & (run.technique=='cb')]
-        # add a column about the source h5 file
-        run["path"] = f.replace("/run.csv", '')
-        # add a column about the tp in the source h5 file  
-        tp = each_dir.lower().split('-')[2]  # hack: todo make it more automatic
-        assert tp in ["bl", "fu2", "fu3"]
-        run["tp"] = tp
-        df_runs.extend([run])
-
-    df_runs = pd.concat(df_runs).reset_index(drop=True)
-    print("running inference  on the holdout set with {} models (3 tps X 4 models X 7 folds) with {} permutation tests in each".format(len(df_runs), N_PERMUTATIONS))
-
-    # get the hyperparameters values to do a gridsearchCV for
-    model_grids = { model:
-            { hparam: df_runs[hparam].dropna().unique().tolist() 
-             for hparam in df_runs.filter(like=f"model_{model}__")} 
-            for model in ['LR','SVM-lin','SVM-rbf','GB']}
-    
-    ##### Initialize new columns to store results from holdout #####
-    for c in ["holdout_score", "holdout_roc_auc",
-              "holdout_ids", "holdout_lbls","holdout_probs",
-              "permuted_holdout_score", "holdout_permuted_roc_auc",
-              "holdout_ids_extra", "holdout_probs_extra"
-             ]:
-        df_runs[c] = np.nan
-        df_runs[c] = df_runs[c].astype('object')
-
+    df_runs = pd.DataFrame()
+    np.random.seed(RAND_STATE)
+    ##### STEP 1 : Collect all run.csv file results from provided settings (exp_run_dirs, HOLDOUT_DIR) into a neat table  #####
+    # if MODEL is not configured then use all models by default
+    assert MODEL in ['LR','SVM-lin','SVM-rbf','GB'], f"invalid models provided in MODEL={MODEL}.\
+    Allowed values are ['LR','SVM-lin','SVM-rbf','GB']"
+        
     print("========================================")
     start_time = datetime.now()
     print("time: ", start_time)
+    
+    MODEL_PIPES = {pipe.steps[-1][0].replace('model_', ''):pipe for pipe, grid in ML_MODELS}
+    # simulate the oversampling Confound control
+    cb = CounterBalance(oversample=True, random_state=RAND_STATE, debug=False)
+    {pipe.steps.insert(-1, ("conf_corr_cb", cb))  for name, pipe in MODEL_PIPES.items()}
+    MODEL_GRIDS = {pipe.steps[-1][0].replace('model_', ''):grid for pipe, grid in ML_MODELS}
+    
+    k=0 # df_runs row idx
+    for i, (cat, train_h5, hold_h5) in enumerate(PERMUTATION_H5):
+        
+        print(f"running '{cat}': \n",'-'*30)
+        if DEBUG: print(f"Training data path:  {train_h5}")
+        # load all data into a dict
+        train_data = {}
+        rand_confs = []
+        with h5py.File(train_h5, 'r') as train_f:
+            for key,val in train_f.items():
+                train_data.update({key:np.array(val)})
+                if 'dummy_' in key: rand_confs.append(key)
+        
+        # load all holdout data into a dict
+        holdout_data = {}
+        with h5py.File(hold_h5, 'r') as hold_f:
+            for key,val in hold_f.items():
+                if key in train_data.keys():
+                    holdout_data.update({key: np.array(val)})
+            # create random confs for holdout too  
+            for rand_conf in rand_confs:
+                holdout_data.update({rand_conf: np.random.randint(0,2, size=len(holdout_data['i']))})
+                
+        
+        if DEBUG: 
+            print(f"Training data keys: {[k for k in train_data.keys() if 'dummy_' not in k]} \
+with n={len([k for k in train_data.keys() if 'dummy_' in k])} dummy confs")
+            print(f"Holdout data keys: {[k for k in holdout_data.keys() if 'dummy_' not in k]} \
+with n={len([k for k in train_data.keys() if 'dummy_' in k])} dummy confs")
 
-
-    data_reload_flag = ''
-
-    for k, row in tqdm(df_runs.iterrows()):
-        # if debug mode then only run 1 in 3 experiments at random
-        if DEBUG and k and np.random.choice([True, True, False]):  continue
-
-        if data_reload_flag != row.path: # reload the data and MLpipeline only if the data to be used changed
-            data_reload_flag = row.path
-
+        for j in tqdm(range(N_PERMUTATIONS)):
+            k += 1
+            conf = rand_confs[j]
+            
+            df_runs.at[k, 'h5cat']=cat 
+            df_runs.at[k, 'train_h5']=train_h5 
+            df_runs.at[k, 'hold_h5']=hold_h5 
+            df_runs.at[k, 'conf']=conf
+            
             # 1) load MLpipeline class (with a random seed)
             m = MLpipeline(PARALLELIZE, 
-                           random_state=np.random.randint(100000), 
+                           random_state=RAND_STATE, #, 
                            debug=DEBUG)
-
             # 2) load the training data    
-            h5_path = join(H5_FILES_PATH, "{}.h5".format(row.path.split('/')[-2]))
-            print(f"Training data path: \t\t{h5_path}")
-            m.load_data(h5_path, y=row.o, confs=['sex', 'site'], group_confs=True)
+            m.load_data(train_data, y='Binge', 
+                        confs=['sex', 'site', conf], 
+                        group_confs=True)
 
-            # 3) load the holdout data and simulate the MLpipeline.train_test_split() func
-            y_name_h5 = slugify(row.o)
-            if y_name_h5 == "audit": y_name_h5+="-total"
-            test_h5_path = sorted(glob(HOLDOUT_DIR.format(row.tp, y_name_h5))) 
-            assert ((len(test_h5_path)==1) or ("binge" in y_name_h5)), "for label {}, multiple test set files found: {}".format(slugify(y_name), test_h5_path)
+            # 3) load the holdout data
+            #  and perform the MLpipeline.train_test_split() func explicitly 
+            m.X_test = holdout_data['X']
+            m.y_test = holdout_data['Binge'] 
+            m.sub_ids_test = holdout_data['i']
 
-            h5_path_holdout = test_h5_path[0]
-            print(f"Testing data path: \t\t{h5_path_holdout}")
-            test_data = h5py.File(h5_path_holdout, "r")  
-
-            m.X_test = test_data['X'][()]
-            m.y_test = test_data[row.o][()]  
-            m.sub_ids_test = test_data['i'][()]
             for c in m.confs:
                 if c != 'group': 
-                    m.confs_test[c] = test_data[c][()]
+                    m.confs_test[c] = holdout_data[c][()]
                     # manually redo confs grouping
-                    v = test_data[c][()]
+                    v = holdout_data[c][()]
                     if "group" not in m.confs_test:
                         m.confs_test["group"] = v
                     else:
@@ -138,44 +147,41 @@ if __name__ == "__main__":
             m.n_samples_tv = len(m.y)
             m.n_samples_test = len(m.y_test)
 
-            m.print_data_size()
+            if DEBUG: m.print_data_size()
 
-        # 3) Load the trained model
-        model_path = glob(f"{row.path}/{row.model}*{row.trial}*.model")[0]
-        print(f"ML model (retraining): \t{model_path}")
+            # 4) re-run the training 
+            model = MODEL_PIPES[MODEL]
+            # when output is not the label 'y', perform counterbalancing across the label 'y'
+            # for 'c' using the variable 'groups' in the cb function
+            conf_corr_params = {"conf_corr_cb__groups": m.confs["group"]} 
+            if DEBUG: print("model pipe = ", model)
 
-        model = load(model_path)
-        n_permutes = N_PERMUTATIONS if row.model in PERMUTE_ONLY_MODELS else 0
-        
-        # 4) run the retraining & hyperparameter tuning and generate report
-        report = m.run(model, grid=model_grids[row.model], 
-                       n_splits=5, conf_corr_params={"conf_corr_cb__groups": m.confs["group"]}, 
-                       permute=n_permutes, verbose=1)
+            # get the hyperparameters values from previous run
+            grid = MODEL_GRIDS[MODEL]
 
-        print("train_score: {:0.2f}% \t valid_score: {:0.2f}% \t holdout_score: {:0.2f}".format(
-         report['train_score']*100, report['valid_score']*100, report['test_score']*100))
+            report = m.run(model, grid=grid, 
+                           n_splits=5, conf_corr_params=conf_corr_params, 
+                           permute=0, verbose=int(DEBUG))
 
-        # store the results in the same dataframe dfIrun
-        for key, val in report.items():
-            # rename the report columns to have 'holdout'
-            new_key = 'holdout_'+ key if 'test' not in key else key.replace('test','holdout')
-            df_runs.at[k, new_key]  = val
+            print("train_score: {:0.2f}% \t valid_score: {:0.2f}% \t holdout_score: {:0.2f}".format(
+             report['train_score']*100, report['valid_score']*100, report['test_score']*100))
+            
+            # store the results in the same dataframe dfIrun
+            for key, val in report.items():
+                # rename the report columns to have 'holdout'
+                new_key = 'holdout_'+ key if 'test' not in key else key.replace('test','holdout')
+                if not isinstance(val, (np.ndarray, list)): 
+                    df_runs.at[k, new_key]  = val
 
+            if DEBUG: 
+                if j>50: break # in debug mode run on maximum 10 samples
 
-        if EXTRA_INFERENCE_DIR:
-            print("running extra inference also on some (unlabeled) subjects at:\n", EXTRA_INFERENCE_DIR)
-
-            extra_h5_path = sorted(glob(EXTRA_INFERENCE_DIR.format(row.tp, y_name_h5))) 
-            assert ((len(extra_h5_path)==1) or ("binge" in y_name_h5)), "for label {}, multiple test set files found: {}".format(slugify(row.o), extra_h5_path)
-
-            extra_h5_path = extra_h5_path[0]
-            extra_data = h5py.File(extra_h5_path, "r")
-            df_runs.at[k, "holdout_ids_extra"]   = extra_data['i'][()].tolist()
-
-            X_extra = extra_data['X'][()]  
-            preds = np.around(model.predict_proba(X_extra), decimals=4)
-            df_runs.at[k, "holdout_probs_extra"]  = preds.tolist()
-
+        # iteratively store results every 50 steps
+            if k%50 == 0: 
+                df_runs.to_csv(SAVE_PATH) 
+                runtime=str(datetime.now()-start_time).split(".")[0]
+                print("RUNTIME: {} secs".format(runtime))
+    
     df_runs.to_csv(SAVE_PATH) 
 
     # print the total runtime

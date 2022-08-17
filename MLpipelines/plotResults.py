@@ -292,3 +292,13 @@ def compute_metric(df, metric_name):
     df[metric_name] = df.apply(lambda x: metric(y_true=x.y_true, y_pred=x.y_pred), axis=1)
     
     return df
+
+
+def calc_p_val(scores, rand_scores, print_it=False):
+    p_vals = [] 
+    for ii, true_score in enumerate(true_scores):
+        C = np.sum(rand_scores >= true_score)
+        pi = (C+1)/(len(rand_scores)+1)
+        if print_it: print(f"p-val for {ii} with {true_score:.2f} = {pi:.4f}")
+        p_vals.extend([pi])
+    return p_vals
