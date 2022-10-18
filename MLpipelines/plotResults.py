@@ -4,6 +4,8 @@ from glob import glob
 from os.path import join 
 import os 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
 import seaborn as sns
 import re
 import sklearn.metrics as metrics
@@ -146,13 +148,13 @@ def calc_p_values(df, x="test_score", viz=False):
     if viz:
         sns.reset_orig()
         n_rows = len(groups)//n_models
-#         fig, axes = plt.subplots(n_rows, n_models, 
-#                                  sharex=True, sharey=False,
-#                                  figsize=(20, n_models*n_rows))
         ## paper plot jugaad
-        fig, axes = plt.subplots(1, 3, 
+#         fig, axes = plt.subplots(1, 3, 
+#                                  sharex=True, sharey=True,
+#                                  figsize=(12, 4))
+        fig, axes = plt.subplots(n_rows, n_models, 
                                  sharex=True, sharey=True,
-                                 figsize=(12, 4))
+                                 figsize=(3+4*n_models*n_rows, 4))
         axes = np.ravel(axes)
         plt.xlim([0,1])
         
@@ -174,15 +176,15 @@ def calc_p_values(df, x="test_score", viz=False):
             p_vals.extend([pi])
             
             if viz: permuted_scores.extend([*p_scores])        
-#         if np.std(permuted_scores)>=1:
-#             print("[WARN] the p-values for {} have high variance across each test-set (trial). \
-# Simply averaging the p-values across trials in such a case is not recommended.".format(g))  
+        if np.std(permuted_scores)>=1:
+            print("[WARN] the p-values for {} have high variance across each test-set (trial). \
+Simply averaging the p-values across trials in such a case is not recommended.".format(g))  
 
         df.loc[(df[grp_order]==g).all(axis=1), ["p_value", ""]] = np.mean(p_vals)  
         
         if viz:
             ax = axes[i]
-#             ax.set_title("Model={}".format(g[-1]))
+            ax.set_title("{}".format(g[-1]))
 #             if i%n_models == 0:
 #                 ax.set_ylabel("{} with {}".format(*g[-3:-1]))
             ax.hist(permuted_scores, bins='auto', alpha=0.8)
@@ -195,17 +197,21 @@ def calc_p_values(df, x="test_score", viz=False):
                 ax.axvline(chance, color='grey', linestyle="--", lw=1.5)
                 ax.set_xlim(0.,1.)
             ## paper plot jugaad
-            ax.set_xticklabels([str(item) for item in range(0,120, 120//len(ax.get_xticklabels()))])
-            inp = "X_{{{}}}".format(["14yr", "19yr", "22yr"][i])
-            out = "y_{{{binge}}}"
-            ax.set_title(r"${} \longmapsto {}$".format(inp,out))
+            # ax.set_xticklabels([str(item) for item in range(0,120, 120//len(ax.get_xticklabels()))])
+            # inp = "X_{{{}}}".format(["14yr", "19yr", "22yr"][i])
+            # out = "y_{{{binge}}}"
+            # ax.set_title(r"${} \longmapsto {}$".format(inp,out))
 #             if i==0: ax.set_ylabel("distribution / counts")
-            if i==1: ax.set_xlabel("Balanced accuracy (%)")
-            if i==0:
-                from matplotlib.lines import Line2D
-                custom_lines = [Line2D([0], [0], color="tab:blue", markerfacecolor="tab:blue", marker='o', markersize=5, lw=0),
-                                Line2D([0], [0], color="tab:red", lw=1, linestyle="--")]
-                ax.legend(custom_lines, ['permuted score', 'model score'], loc='lower left')
+            ax.set_xlabel("Balanced accuracy (%)")
+            # if i==0:
+            custom_lines = [Rectangle((0, 0), 1, 1, fc="w", fill=False, edgecolor='none', linewidth=0), # dummy
+                            Line2D([0], [0], color="tab:blue", markerfacecolor="tab:blue", 
+                                   marker='o', markersize=5, lw=0),
+                            Line2D([0], [0], color="tab:red", lw=1, linestyle="--")
+                            ]
+            ax.legend(custom_lines, 
+                      [f'P-value = {np.mean(p_vals):.3f}', 'permuted score', 'model score', ], 
+                      loc='lower left')
             
     sns.set(style='whitegrid')
     return df
