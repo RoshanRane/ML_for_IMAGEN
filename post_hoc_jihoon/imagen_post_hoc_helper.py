@@ -48,7 +48,100 @@ from imagen_dataloader import *
 sns.set_style("darkgrid")
 warnings.filterwarnings('ignore')
 
-#################################################################################
+
+################################# Roshan's helper functions ########################################
+
+def get_top_features(tp_list=['FU3', 'FU2', 'BL'], threshold='2mean', viz=False):
+    posthoc = IMAGEN_posthoc()
+    """ generate the dictionary of the mean SHAP of top features """
+    ### helper funcs
+    def get_featuretype_cnt(fs):
+        dfc = pd.DataFrame()
+        dfc.loc[0, 'Total'] = len(fs)
+        dfc.loc[0, 'DTI'] = len([f for f in fs if 'DTI'==f.split('_')[0]])
+        dfc.loc[0, 'T1w'] = len([f for f in fs if 'T1w'==f.split('_')[0]])
+        dfc.loc[0, 'subcor'] = len([f for f in fs if 'subcor'==f.split('_')[1]])
+        dfc.loc[0, 'subcor_area'] = len([f for f in fs if 'subcor'==f.split('_')[1] and 'mean'==f.split('_')[-1]])
+        dfc.loc[0, 'subcor_vol'] = len([f for f in fs if 'subcor'==f.split('_')[1] and 'volume'==f.split('_')[-1]])
+        dfc.loc[0, 'cor'] = len([f for f in fs if 'cor'==f.split('_')[1]])
+        dfc.loc[0, 'cor_area'] = len([f for f in fs if 'cor'==f.split('_')[1] and 'area'==f.split('-')[-1]])
+        dfc.loc[0, 'cor_curv'] = len([f for f in fs if 'cor'==f.split('_')[1] and 'curv' in f.split('-')[-1]])
+        dfc.loc[0, 'cor_vol'] = len([f for f in fs if 'cor'==f.split('_')[1] and 'vol' in f.split('-')[-1]])
+        dfc.loc[0, 'cor_thick'] = len([f for f in fs if 'cor'==f.split('_')[1] and 'thickness' in f.split('-')[-1]])
+        dfc.loc[0, 'cor_foldind'] = len([f for f in fs if 'cor'==f.split('_')[1] and 'foldind' == f.split('-')[-1]])
+        dfc = dfc.astype(int)
+        return dfc.style.background_gradient(cmap='gray', vmin=0, vmax=len(top_features))
+
+    shap_values_dict = {}
+    
+    for tp in tp_list:
+        # load the mean|SHAP| value
+        df = posthoc.read_SHAP(f'all_{tp}_SHAP.csv').set_index('Feature name').filter(regex="SVM-rbf._.* mean")
+        df["all average"] = df.mean(axis=1)
+        df = df.sort_values("all average", ascending=False)
+        
+        # Threshold
+        if threshold=='2mean':
+            thresh = 2 * df['all average'].mean()
+        elif threshold=='mean':
+            thresh = 1.1* df['all average'].mean()
+        else:
+            # first, convert the log-normal distribution to a normal distribution and then use std. dev. to set the cut-offs
+            df2 = df.copy()
+            for c in df2:
+                df2[c] = np.log1p(df2[c].apply(lambda x: x*1000))/1000
+            df2['lognorm mean'] = df2.mean(axis=1)
+            df2['lognorm std'] = df2.std(axis=1)
+            # set the threshold as mean|SHAP| + (x * std)
+            if threshold=='95%':
+                thresh = df2['lognorm average'].mean() + (1.96 * df2['lognorm std']) # 95%
+            elif threshold=='99%':
+                thresh = df2['lognorm average'].mean() + (2.58 * df2['lognorm std']) # 99%
+            else: # threshold=='99.9%':
+                thresh = df2['lognorm average'].mean() + (3.3 * df2['lognorm std'])  # 99.9%
+        
+            thresh = (math.exp(1000*thresh)-1)/1000
+
+        # Top features
+        df_top_features = df[df.apply(lambda x: x>=thresh).sum(axis=1) >= len(df.columns)-1] # .all(axis=1)]#
+        top_features = df_top_features.index.to_list()
+#         top_features = top_features.index.to_list()
+#         top_features_dict.update({tp:top_features})
+        
+        # load the mean of the SHAP values of these top_features
+        df_features_posSHAP = posthoc.read_SHAP(f'all_SVM-rbf_{tp}_POS.csv')[top_features]
+        shap_values_dict.update({tp: dict(df_features_posSHAP.mean())})
+
+        if viz == True:
+            print(f'{"-"*36}\n    Analysis: {tp}   \n{"-"*36} \nThreshold >= {thresh} \n')
+            if threshold==0:
+                print(f'original: {new_thresh}')
+            
+            df_display = df_features_posSHAP.mean().to_frame().rename(columns={0: 'ave. feature value'})
+            df_display['ave. SHAP value'] = df_top_features["all average"]
+            display(df_display.sort_values(by='ave. SHAP value', ascending=False).style.bar(align='zero', color=['#d65f5f', '#5fba7d']))
+            display(get_featuretype_cnt(top_features))
+            display(df.head(22).style.background_gradient(vmin=thresh, cmap='PuBu_r').highlight_between(right=thresh, color='black'))
+    return shap_values_dict
+
+
+def save_colormap(cmap, viz=False):
+    """Plot the colormap """
+    cmap = plt.cm.get_cmap(cmap)
+    colors = cmap(np.arange(cmap.N))
+    
+    fig, ax = plt.subplots(1, figsize=(6, 1),
+                           subplot_kw=dict(xticks=[], yticks=[]))
+    ax.imshow([colors], extent=[0, 10, 0, 1])
+    
+    if viz == True:
+        save_path = f"{SAVE_DIR}/cool.svg"
+        if not os.path.isdir(os.path.dirnmae(save_path)):
+            os.makedirs(os.path.dirnmae(save_path))
+        fig.savefig(save_path)
+        
+        
+########################   JiHoon's helper functions    #########################
 #                             POST HOC DATA LOADER                              #
 #################################################################################
 

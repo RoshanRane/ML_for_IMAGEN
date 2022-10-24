@@ -21,25 +21,29 @@ from tqdm import tqdm
 
 # Define settings for the experiment 
 DATA_DIR = "/ritter/share/data/IMAGEN"
-H5_FILES_PATH = "/ritter/share/data/IMAGEN/h5files"
+H5_FILES_PATH = "/ritter/share/data/IMAGEN/h5files" 
     
 # directories of all 3 timepoints
-tp_dirs = ['newlbls-clean-bl-espad-fu3-19a-binge-n620/*/',
-           'newlbls-clean-fu2-espad-fu3-19a-binge-n634/*/', 
-           'newlbls-clean-fu3-espad-fu3-19a-binge-n650/*/'] #todo site# :: 'across_sites/lbls-bl-*'
+tp_dirs = [
+            # 'newlbls-clean-bl-espad-fu3-19a-binge-n620/*/', 
+            # 'newlbls-clean-fu2-espad-fu3-19a-binge-n634/*/', 
+            # 'newlbls-clean-fu3-espad-fu3-19a-binge-n650/*/',
+            'newlbls-clean-bl-espad-fu3-19a-binge-causal-onset0-n477/*/',
+            'newlbls-clean-bl-espad-fu3-19a-binge-causal-onset1-n565/*/',
+          ] #todo site# :: 'across_sites/lbls-bl-*'
 
 HOLDOUT_DIR = "/ritter/share/data/IMAGEN/h5files/newholdout-clean-{}*{}*.h5" #todo site# newholdout:: h5files/holdout-
-SAVE_PATH = "results/holdout-alltp-clean_run.csv" #todo site# #holdout_results :: holdout_results_sites 
+SAVE_PATH = "results/holdout-alltp-clean-causal-onset_run.csv" #todo site# #holdout_results :: holdout_results_sites 
 
 ## Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
 N_PERMUTATIONS = 1000
-PERMUTE_ONLY_MODELS = ['SVM-rbf', 'GB']
-PARALLELIZE = True # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
+PERMUTE_ONLY_MODELS = ['SVM-rbf'] #['SVM-rbf', 'GB']
+PARALLELIZE = False # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
 DEBUG = False
 
-EXTRA_INFERENCE_DIR = False# "/ritter/share/data/IMAGEN/h5files/mediumextras-{}*{}*.h5"
+EXTRA_INFERENCE_DIR = False # "/ritter/share/data/IMAGEN/h5files/mediumextras-{}*{}*.h5"
 
 if DEBUG:
     if N_PERMUTATIONS > 2: N_PERMUTATIONS = 2
@@ -64,10 +68,13 @@ if __name__ == "__main__":
         run = run[~(run.o_is_conf) & ~(run.i_is_conf) & (run.technique=='cb')]
         # add a column about the source h5 file
         run["path"] = f.replace("/run.csv", '')
+        # add another unique name to each tp_dir
+        run["h5_unique_prepend"] = '-'.join(each_dir.split("/")[0].split('-')[-3:])
         # add a column about the tp in the source h5 file  
         tp = each_dir.lower().split('-')[2]  # hack: todo make it more automatic
         assert tp in ["bl", "fu2", "fu3"]
         run["tp"] = tp
+        
         df_runs.extend([run])
 
     df_runs = pd.concat(df_runs).reset_index(drop=True)
