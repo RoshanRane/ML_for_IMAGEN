@@ -17,6 +17,8 @@ from plotGraphs import plotGraph
 
 DATA_DIR = "/ritter/share/data/IMAGEN/IMAGEN_RAW/2.7/"
 BIDS_DIR = "/ritter/share/data/IMAGEN/IMAGEN_BIDS/"
+CONF_DATA_DIR = "/ritter/share/data/IMAGEN/posthoc/"
+
 # path to questionaires files
 qs = dict(
         AUDIT_BL  = DATA_DIR + "BL/psytools/IMAGEN-IMGN_AUDIT_CHILD_RC5-IMAGEN_DIGEST.csv",
@@ -35,6 +37,8 @@ qs = dict(
         
         PHENOTYPE = DATA_DIR + "combinations/drinking_phenotype/Seo_drinking_phenotype_fu2.csv",
         OUR_COMBO = DATA_DIR + "combinations/our_custom_combo/our_custom_combo.csv",
+    
+        CONF_EATING = CONF_DATA_DIR + 'all_Eating.csv',
         )
 
 qs_is_raw_csv = dict(
@@ -252,6 +256,7 @@ class Imagen:
             
     def prepare_X(self, tp_scan, 
                   preloaded_X=None, mri_col="", feature_cols=".+",  
+                  filter_only_ids=None,
                   confs=["sex", "site"], 
                   viz=True):
         '''Prepare the "X" column in the self.df_out (that gets converted to hdf5).
@@ -296,7 +301,14 @@ class Imagen:
             feature = feature.filter(regex=feature_cols)
             self.X_colnames = list(feature.columns)
             self.df_out = self.df_out.merge(feature, on="ID")
-            
+        
+        # if an additional subject ID filter is provided by users 
+        if filter_only_ids is not None:
+            valid_filter_only_ids = self.df_out.index.intersection(filter_only_ids)
+            if len(valid_filter_only_ids) < len(filter_only_ids):
+                print(f"[WARN] When applying 'filter_only_ids', out of {len(filter_only_ids)} subIDs provided, only {len(valid_filter_only_ids)} were available")
+            self.df_out = self.df_out.loc[valid_filter_only_ids]
+        
         if viz: print(self.df_out[self.all_labels[0]].map(
             {0: 'Safe users', 1: 'Heavy misusers', np.nan: 'Moderate misusers'}
         ).value_counts().sort_index(ascending=False))  
@@ -418,7 +430,7 @@ def create_h5s(lbl_combos, name, x_tp="FU3", data_subset_to_use='trainval', viz=
         else:
             d = Imagen(exclude_holdout=True)         
 
-        if qs_is_raw_csv[csv]:
+        if csv in qs_is_raw_csv and qs_is_raw_csv[csv]:
             dfq = pd.read_csv(qs[csv], usecols=["User code", col], dtype={"User code":str})
             dfq["ID"] = dfq["User code"].str.replace("-C", "").replace("-I", "").astype(int)
             dfq = dfq.drop("User code", axis=1)
@@ -426,12 +438,32 @@ def create_h5s(lbl_combos, name, x_tp="FU3", data_subset_to_use='trainval', viz=
             dfq = pd.read_csv(qs[csv], usecols=["ID", col])
         
         d.load_label(dfq, col=col, viz=(viz>1), binarize=True, class0=c0, class1=c1, y_colname=colname)
-        d.prepare_X(x_tp, feature_cols=feature_cols, viz=(viz>0))
+        
+        filter_only_ids = None
+        if 'causal' in x_tp:
+            causal_threshold = int(x_tp.replace('causal', '')) 
+            x_tp = 'BL' # force the tp to be BL
+            espad_BL = pd.read_csv(qs["ESPAD_BL"], sep=",", dtype={"User code":str, "Valid":str}, 
+                                   usecols=["User code", "19a"])
+            espad_BL["User code"] = espad_BL["User code"].apply(lambda x: int(x.replace("-C", "")))
+            espad_BL = espad_BL.rename(columns={"User code" : "ID"}).set_index("ID", drop=True)
+            # force NaN values to 0
+            espad_BL["Binge_age14"] = espad_BL["19a"].fillna(0.)
+            # get only the subject IDs that are beyond the causal threshold
+            filter_only_ids = espad_BL[espad_BL['Binge_age14']<=causal_threshold].index
+        
+        d.prepare_X(x_tp, feature_cols=feature_cols, viz=(viz>0),
+                   filter_only_ids=filter_only_ids)
+        
+        # if subs_onset is not None:
+        #     print(len(subs_onset), (d.df_out.index))
+        #     d.df_out = d.df_out.loc[subs_onset]
+        #     print(len(d.df_out))
         
         d.hdf5_name_x = name
         d.hdf5_name_y = csv + "-" + col + "-" + colname + "-"
         if viz: 
-            plt.show()
+            plt.show() 
             print("shape of X", d.df_out[d.X_colnames].values.shape)
         else: 
             d.save_h5()
