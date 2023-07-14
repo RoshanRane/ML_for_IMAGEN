@@ -26,22 +26,24 @@ from runMLpipelines import ML_MODELS
 # Define settings for the experiment 
 DATA_DIR = "/ritter/share/data/IMAGEN"
 H5_DIR = "/ritter/share/data/IMAGEN/h5files"
-    
+rerun_ver = 'posthoc-cc3' # posthoc-cc3 or posthoc-cc2 or posthoc-cc
 # directories with the run results to rerun on holdout data
-exp_run_dirs = ['posthoc-cc2-h5bl-*/',
-                'posthoc-cc2-h5causal1-*/', 
-                'posthoc-cc2-h5causal0-*/',]
+exp_run_dirs = [
+                # f'{rerun_ver}-h5bl-*/',
+                f'{rerun_ver}-h5causal1-*/', 
+                f'{rerun_ver}-h5causal0-*/',]
 
-HOLDOUT_DIR = ["posthoc-cc2-holdout-h5bl.h5",
-               "posthoc-cc2-holdout-h5causal0.h5",
-               "posthoc-cc2-holdout-h5causal1.h5",]
+HOLDOUT_DIR = [
+               # f'{rerun_ver}-holdout-h5bl.h5',
+               f'{rerun_ver}-holdout-h5causal0.h5',
+               f'{rerun_ver}-holdout-h5causal1.h5',]
 
-SAVE_PATH = "results/holdout-posthoc-cc2-final_run.csv" 
+SAVE_PATH = f"results/holdout-{rerun_ver}_run.csv" 
 
 # Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
 N_PERMUTATIONS = 0 # 1000
-USE_ONLY_MODELS = ['SVM-rbf', 'GB'] # ['LR','SVM-lin','SVM-rbf','GB']
+USE_ONLY_MODELS = ['SVM-rbf'] # ['LR','SVM-lin','SVM-rbf','GB']
 PARALLELIZE = True # within each MLPipeline trial, do you want to parallelize the permutation test runs too?
 # if set to true it will run 1 trial with no parallel jobs and enables debug msgs
 DEBUG = False
@@ -60,8 +62,8 @@ if __name__ == "__main__":
     hold_h5_fs = {}
     hold_h5s_confs = {}
     for hold_h5 in HOLDOUT_DIR:
-        hold_h5cat = hold_h5.split('.')[-2].replace('posthoc-cc2-holdout-h5','').replace('/','')
-        hold_f=h5py.File(join(H5_DIR,hold_h5), 'r')
+        hold_h5cat = hold_h5.split('.')[-2].replace(f'{rerun_ver}-holdout-h5','').replace('/','')
+        hold_f=h5py.File(join(H5_DIR, hold_h5), 'r')
         hold_h5_fs.update({hold_h5cat : hold_f})
         hold_h5s_confs.update({hold_h5cat : list(hold_f.attrs['confs'])})
     if DEBUG: print("holdout files:", hold_h5_fs)
@@ -90,7 +92,8 @@ if __name__ == "__main__":
             results, folder, timeline, runcsv = f.split('/')
             # todo: hacky code below
             h5cat = folder.lower().split('-')[2].replace('h5','')  
-            conf = folder.replace(f'posthoc-cc2-h5{h5cat}-', '')
+            conf = folder.replace(f'{rerun_ver}-h5{h5cat}-', '')
+            # print('[D]',folder, h5cat, conf)
             run["h5cat"] = h5cat
             run["conf"] = conf
             run["path"] = folder + '/' + timeline
@@ -125,7 +128,6 @@ Below code might not work as expected anymore..'
     print("========================================")
     start_time = datetime.now()
     print("time: ", start_time)
-    
     
     
     MODEL_PIPES = {pipe.steps[-1][0].replace('model_', ''):pipe for pipe, grid in ML_MODELS}

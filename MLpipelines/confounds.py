@@ -8,6 +8,7 @@ from sklearn.metrics import balanced_accuracy_score, get_scorer
 from sklearn.utils import indexable
 from sklearn.utils.validation import _num_samples
 from sklearn.model_selection import BaseCrossValidator
+from sklearn import linear_model
 import pandas as pd 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,7 +22,16 @@ import multiprocessing as mp
 
 
 class CounterBalance(BaseEstimator):
+    '''
+    Can you used to perform confounder control using counter balancing in the MLpipeline
     
+    Arg:: 
+    oversample: Used to define what kind of resampling strategy will be used to 
+    balanced the group counts.
+    If True, the smaller group is sampled with replacement (oversampling)
+    If False, the larger group is subsampled without replacement (undersampling)
+    If set to None, then a mixed oversample + undersampling strategy is used, chosen randomly for each data point
+    '''
     def __init__(self, oversample=None, random_state=None, debug=False):
         self.oversample = oversample
         self.random_state = random_state
@@ -71,20 +81,26 @@ X.shape={}  y.shape={}  cb_by.shape={}  groups.shape={}".format(
                 oversample_i = self.oversample
             
             for _, dfii in dfi.groupby("cb_by"):
-                if not oversample_i: # subsample the larger groups
+                # oversample the smaller group if oversample_i = True
+                if oversample_i: 
+                    # keep the entire largest group as is
+                    if len(dfii) == counts.max():
+                        keep_idxs = np.append(keep_idxs, dfii.idx)
+                    else:
+                        # in smaller group, ensure all indices occur at least once
+                        keep_idxs = np.append(keep_idxs, dfii.idx) 
+                        # oversample for the remaining counts to be filled
+                        idxs = rng.choice(dfii.idx, size=counts.max()-len(dfii), replace=True)
+                        keep_idxs = np.append(keep_idxs, idxs)   
+                        
+                # subsample the larger group if oversample_i = False
+                else: 
                     # keep the entire smaller group as is
                     if len(dfii) == counts.min():
                         keep_idxs = np.append(keep_idxs, dfii.idx)
                     else:
                         idxs = rng.choice(dfii.idx, size=counts.min(), replace=False)
-                        keep_idxs = np.append(keep_idxs, idxs)        
-                else: # or over-sample the smaller group
-                    # keep the entire largest group as is
-                    if len(dfii) == counts.max():
-                        keep_idxs = np.append(keep_idxs, dfii.idx)
-                    else:
-                        idxs = rng.choice(dfii.idx, size=counts.max(), replace=True)
-                        keep_idxs = np.append(keep_idxs, idxs)   
+                        keep_idxs = np.append(keep_idxs, idxs)  
         
         if self.debug:
             print("[DEBUG] After counter balancing:")
@@ -140,6 +156,46 @@ X.shape={}  y.shape={}  groups.shape={}".format(
                 
         return X_new, y
 
+class ConfoundRegressorContinuousX(BaseEstimator) :
+    """This is class to regress out continous confounds. It is inspired by
+    the work McNamee Roseanne: Regression modelling and other methods to control confounding (2005)
+    todo
+    """    
+    def __init__(self, debug=False):
+        self.debug = debug
+
+    def fit_resample(self, X, y=None, age=None): 
+        """
+        Args:
+            X (np.array): A numpy array of shape (n_samples, n_features+1). 
+            The last column holds the continous confounder.
+            y : Does nothing. Defaults to None.
+        Returns:
+            class: Residuals.
+        """
+
+        if self.debug: 
+            print(
+                "[DEBUG] ConfoundRegressorContinuousX.regress_features()called with \X.shape={}y.shape={}".format(X.shape, y.shape))       
+
+        confounder = age
+
+
+        if len(np.unique(confounder))/ len(confounder) < 0.1:
+            raise ValueError("This methos is only available for continuous condounders!")
+
+
+        # calculate the residuals of each feature in X
+        residuals = []
+        for feature in np.transpose(X):
+            clf = linear_model.LinearRegression(fit_intercept=True)
+            clf.fit(confounder.reshape(-1, 1), feature)
+            residual =  feature -  clf.coef_[0] * confounder  
+            residuals.append(residual)
+        X_residualized = np.transpose(residuals)
+
+
+        return X_residualized , y
 
 class PredictionBasedCorrection():
 

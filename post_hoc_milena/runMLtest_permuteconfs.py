@@ -31,18 +31,18 @@ H5_DIR = "/ritter/share/data/IMAGEN/h5files/"
 PERMUTED_H5_DIR = "/ritter/roshan/workspace/ML_for_IMAGEN/post_hoc_milena/h5_permuted_confs/"
 PERMUTATION_H5 = [
     # h5cat, training data, holdout data  
-    ("bl",      
-     PERMUTED_H5_DIR+"permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-n620.h5", 
-     H5_DIR+"posthoc-cc2-holdout-h5bl.h5"),
+    # ("bl",      
+    #  PERMUTED_H5_DIR+"permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-n620.h5", 
+    #  H5_DIR+"posthoc-cc2-holdout-h5bl.h5"),
     ("causal1", 
      PERMUTED_H5_DIR+"permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-causal-onset1-n565.h5", 
-     H5_DIR+"posthoc-cc2-holdout-h5causal1.h5"),
+     H5_DIR+"posthoc-cc3-holdout-h5causal1.h5"),
     ("causal0", 
      PERMUTED_H5_DIR+"permutedconfs10000-newlbls-clean-bl-espad-fu3-19a-binge-causal-onset0-n477.h5", 
-     H5_DIR+"posthoc-cc2-holdout-h5causal0.h5"),
+     H5_DIR+"posthoc-cc3-holdout-h5causal0.h5"),
 ]
 
-SAVE_PATH = "results/holdout-posthoc-cc2-permuted_run.csv" 
+SAVE_PATH = "results/holdout-posthoc-cc3-permuted_run.csv" 
 
 # Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
