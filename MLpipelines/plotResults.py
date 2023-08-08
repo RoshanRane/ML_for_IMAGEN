@@ -84,7 +84,7 @@ def plot_result(df_full, x="test_score", conf_ctrl=[], input_type='',
         ax = sns.pointplot(y=y, x=x, order=y_order,
                            hue="model", hue_order=hue_order,
                            join=join, data=dfi, ax=ax,
-                           ci=ci, errwidth=errwidth, capsize=capsize,
+                           errorbar=('ci', 95), errwidth=errwidth, capsize=capsize,
                            dodge=dodge, scale=scale, palette=palette)# todo bugfix ci is sensible only if each trial score is statistically independant
         ax.legend_.remove()
         ax.set_title("{} (ave. n={:.0f})".format(t.upper(), dfi["n_samples"].mean()))
