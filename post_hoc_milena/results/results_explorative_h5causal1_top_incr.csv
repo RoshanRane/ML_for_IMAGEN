@@ -1,3 +1,0 @@
-Confound,Conf_time_point,Model,h5name,Accuracy BL,Std-Dev BL,Accuracy CB,Std-Dev CB,Accuracy Diff CB - BL,Std-Dev Diff CB - BL,h5cat,category
-Drugs_lastmnt_TLFBFU3,BL,SVM-rbf,posthoc-cc3-h5causal1-Drugs_lastmnt_TLFBFU3,0.6464404059231647,0.06197891843964829,0.6619613455820353,0.055560504162273164,0.015520939658870692,0.022270377963778638,h5causal1,Addiction-related
-Tobacco_lastmnt_TLFBFU3,BL,SVM-rbf,posthoc-cc3-h5causal1-Tobacco_lastmnt_TLFBFU3,0.6464404059231647,0.06197891843964829,0.6878404266335301,0.06248302314832213,0.041400020710365415,0.04136545965418932,h5causal1,Addiction-related
