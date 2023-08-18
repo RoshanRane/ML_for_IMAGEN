@@ -38,7 +38,7 @@ HOLDOUT_DIR = [
                f'{rerun_ver}-holdout-h5causal0.h5',
                f'{rerun_ver}-holdout-h5causal1.h5',]
 
-SAVE_PATH = f"results/holdout-{rerun_ver}_run.csv" 
+SAVE_PATH = f"results/{rerun_ver}-holdout-run.csv" 
 
 # Permutation tests
 # Total number of permutation tests to run. Set to 0 to not perform any permutations. 
