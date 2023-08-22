@@ -3,6 +3,7 @@ nohup*.out
 MLpipelines/results/*
 run.csv
 post_hoc_jihoon/imagen_VS_results-Santiago.ipynb
+MLpipelines/runML*conf*.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
