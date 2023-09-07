@@ -1,0 +1,15 @@
+,Alc-lastmntFU3,Alcohol_problem_indexFU3,Age_first_drunkFU3,Sensation_seeking,Alc-last12mntFU3,Accident_val,Drug_abuse_screening_parent,Eating_behavior_uncontrolled_eatingFU3,Conformity_drinking_motiveFU3,Smoking_lifetimeFU3,Neuroticism,Autonomy_freq,Sexuality_freqFU3,y-label = Binge
+Alc-lastmntFU3,1.0,0.0,0.0,0.781,0.0,0.262,0.0,0.407,0.0,0.782,0.781,0.853,0.0,0.066
+Alcohol_problem_indexFU3,0.0,1.0,0.0,0.0,0.0,0.0,0.003,0.0,0.542,0.0,0.0,0.0,0.0,0.0
+Age_first_drunkFU3,0.0,0.0,1.0,0.0,0.308,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.71,0.0
+Sensation_seeking,0.781,0.0,0.0,1.0,0.0,0.4,0.0,0.269,0.0,0.579,1.0,0.926,0.0,0.035
+Alc-last12mntFU3,0.0,0.0,0.308,0.0,1.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.515,0.0
+Accident_val,0.262,0.0,0.0,0.4,0.0,1.0,0.003,0.053,0.0,0.166,0.404,0.354,0.0,0.003
+Drug_abuse_screening_parent,0.0,0.003,0.0,0.0,0.0,0.003,1.0,0.0,0.011,0.0,0.0,0.0,0.0,0.0
+Eating_behavior_uncontrolled_eatingFU3,0.407,0.0,0.0,0.269,0.0,0.053,0.0,1.0,0.0,0.579,0.265,0.308,0.0,0.313
+Conformity_drinking_motiveFU3,0.0,0.542,0.0,0.0,0.0,0.0,0.011,0.0,1.0,0.0,0.0,0.0,0.0,0.0
+Smoking_lifetimeFU3,0.782,0.0,0.0,0.579,0.0,0.166,0.0,0.579,0.0,1.0,0.578,0.643,0.0,0.119
+Neuroticism,0.781,0.0,0.0,1.0,0.0,0.404,0.0,0.265,0.0,0.578,1.0,0.926,0.0,0.035
+Autonomy_freq,0.853,0.0,0.0,0.926,0.0,0.354,0.0,0.308,0.0,0.643,0.926,1.0,0.0,0.043
+Sexuality_freqFU3,0.0,0.0,0.71,0.0,0.515,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0,0.0
+y-label = Binge,0.066,0.0,0.0,0.035,0.0,0.003,0.0,0.313,0.0,0.119,0.035,0.043,0.0,1.0
